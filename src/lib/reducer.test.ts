@@ -12,8 +12,8 @@ describe('reducer — set', () => {
       direction: 'pool-to-funnel',
     });
     // 3² − 0² = 9
-    expect(next.transfer?.credits).toBeCloseTo(9);
-    expect(poolFromState(next)).toBeCloseTo(91);
+    expect(next.transfer?.credits).toBe(9);
+    expect(poolFromState(next)).toBe(91);
   });
 
   it('emits a funnel-to-pool transfer when reducing votes', () => {
@@ -21,16 +21,16 @@ describe('reducer — set', () => {
     s = reducer(s, { type: 'set', itemId: 'a', votes: 2 });
     // 5² − 2² = 21 freed, going back to the pool
     expect(s.transfer).toMatchObject({ direction: 'funnel-to-pool' });
-    expect(s.transfer?.credits).toBeCloseTo(21);
-    expect(poolFromState(s)).toBeCloseTo(96);
+    expect(s.transfer?.credits).toBe(21);
+    expect(poolFromState(s)).toBe(96);
   });
 
   it('clamps against the global pool — never breaks conservation', () => {
     let s = reducer(setup(100), { type: 'set', itemId: 'a', votes: 8 }); // 64 spent
     s = reducer(s, { type: 'set', itemId: 'b', votes: 99 }); // ask for absurd
     // 100 − 64 = 36 left → max 6 votes on b
-    expect(s.votes.b).toBeCloseTo(6);
-    expect(poolFromState(s)).toBeCloseTo(0);
+    expect(s.votes.b).toBe(6);
+    expect(poolFromState(s)).toBe(0);
   });
 
   it('caps any single funnel at √budget', () => {
@@ -70,7 +70,7 @@ describe('reducer — reset', () => {
       itemId: 'a',
       direction: 'funnel-to-pool',
     });
-    expect(s.transfer?.credits).toBeCloseTo(16);
+    expect(s.transfer?.credits).toBe(16);
     expect(poolFromState(s)).toBe(100);
   });
 
@@ -105,7 +105,7 @@ describe('reducer — set-budget', () => {
     s = reducer(s, { type: 'set', itemId: 'b', votes: 6 });
     s = reducer(s, { type: 'set-budget', budget: 25 });
     // budget 25 → cap √25 = 5 per funnel
-    for (const v of Object.values(s.votes)) expect(v).toBeLessThanOrEqual(5 + 1e-9);
+    for (const v of Object.values(s.votes)) expect(v).toBeLessThanOrEqual(5);
     expect(poolFromState(s)).toBeGreaterThanOrEqual(0);
   });
 });

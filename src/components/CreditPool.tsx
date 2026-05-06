@@ -27,6 +27,8 @@ interface Props {
 export const CreditPool = ({ remaining, budget, height = 84 }: Props) => {
   const reduceMotion = useReducedMotion();
   const fillRatio = budget > 0 ? Math.max(0, Math.min(1, remaining / budget)) : 0;
+  // Polish round 2: votes (and therefore credits) are integers.
+  const remainingInt = Math.round(remaining);
 
   return (
     <div
@@ -35,8 +37,8 @@ export const CreditPool = ({ remaining, budget, height = 84 }: Props) => {
       aria-label="Credits remaining in the pool"
       aria-valuemin={0}
       aria-valuemax={budget}
-      aria-valuenow={Math.round(remaining * 100) / 100}
-      aria-valuetext={`${Math.round(remaining * 100) / 100} of ${budget} credits remaining`}
+      aria-valuenow={remainingInt}
+      aria-valuetext={`${remainingInt} of ${budget} credits remaining`}
     >
       <div
         className="relative w-full overflow-hidden rounded-[14px]"
@@ -76,15 +78,14 @@ export const CreditPool = ({ remaining, budget, height = 84 }: Props) => {
           ))}
         </div>
 
-        {/* Numeric label, layered above the water. Stacks tight on narrow
-            viewports where the wide reservoir squeezes horizontal room. */}
-        <div className="relative flex h-full items-center justify-between gap-3 px-4 md:px-6">
+        {/* Single understated readout — the bar is the hero, the
+            number is supporting context. */}
+        <div className="relative flex h-full items-center px-4 md:px-6">
           <span className="font-display text-size-1 md:text-size-2 leading-none text-white drop-shadow-[0_1px_0_rgba(0,0,0,0.25)] tabular-nums">
-            {(Math.round(remaining * 100) / 100).toFixed(2)}
-          </span>
-          <span className="text-size--3 md:text-size--2 font-body text-white/85 tracking-wide uppercase text-right leading-tight">
-            of {budget}
-            <br className="md:hidden" /> credits remaining
+            {remainingInt}
+            <span className="ml-1 font-body text-size--2 md:text-size--1 text-white/85">
+              / {budget} credits
+            </span>
           </span>
         </div>
       </div>

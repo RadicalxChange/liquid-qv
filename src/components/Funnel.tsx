@@ -7,48 +7,42 @@ import {
   useEffect,
   useId,
   useRef,
+  useState,
 } from 'react';
-import { roundVotes } from '../math/qv';
 
 /*
  * Funnel — a 90° inverted right-triangle whose water level *is* the vote
- * count, and whose water area *is* the credits spent. The whole point of
- * the tool flows out of two equations:
+ * count, and whose water area *is* the credits spent. Two equations and
+ * the rest follows:
  *
  *     votes  = h            (water height in funnel-units)
  *     credits = h²          (water area: ½ · 2h · h)
  *
  * The funnel walls meet at 45° at the apex. Width at height h is 2h, so
- * adding the next sliver of water needs more credits than the last —
- * that's diminishing returns made geometric.
+ * adding the next sliver of water needs more credits than the last.
  *
- * SVG coordinate system note:
- *   We render with +y going *down* (standard SVG), and place the apex at
- *   the *bottom* of the drawn region. Water height h is measured upward
- *   from the apex toward the rim. Internally we flip: the water polygon
- *   for level `votes` is drawn with vertices at
+ * Polish round 2: votes are whole numbers. The drag still feels smooth —
+ * we render the fractional pointer position locally during a drag — but
+ * commits to the parent reducer always go through Math.round, and the
+ * water snaps to the integer level when the finger lifts. The vote-scale
+ * tick labels were stripped (math-y noise; the geometry already conveys
+ * height), and the funnel rim is the visual cap.
  *
- *     (cx, APEX_Y)
- *     (cx - votes·SCALE, APEX_Y - votes·SCALE)
- *     (cx + votes·SCALE, APEX_Y - votes·SCALE)
- *
- *   where SCALE = (drawable height in px) / maxVotes. SCALE collapses
- *   the abstract vote-units into pixels but does not change the
- *   `credits = votes²` relationship one bit.
+ * SVG coordinate system: +y goes down, apex sits at the bottom of the
+ * drawn region, water height is measured upward from the apex toward
+ * the rim.
  */
 
 interface FunnelProps {
-  /** Current vote level on this funnel (in vote units, fractional). */
+  /** Current vote level on this funnel (committed integer). */
   votes: number;
-  /** Maximum allowed votes here, capped at √budget. */
+  /** Maximum allowed votes here (= floor(√budget)). */
   maxVotes: number;
-  /** Whether dragging is allowed against the global pool. */
-  available: number; // votes that could still be added before pool empties
-  /** Called continuously while the user drags or steps the level. */
+  /** Votes that could still be added before the pool empties. */
+  available: number;
+  /** Called once at pointer-up (or keyboard step) with the new integer. */
   onChange: (votes: number) => void;
-  /** Called once at pointer-up — useful for animating the transfer flow. */
-  onCommit?: (votes: number) => void;
-  /** Visible label for screen readers and the drag handle aria-valuetext. */
+  /** Visible label for screen readers and the slider's aria-valuetext. */
   label: string;
   /** Pixel width of the funnel SVG (height auto-derives from 45° geometry). */
   size?: number;
@@ -61,7 +55,6 @@ export const Funnel = ({
   maxVotes,
   available,
   onChange,
-  onCommit,
   label,
   size = 220,
   style,
@@ -71,50 +64,49 @@ export const Funnel = ({
   const draggingRef = useRef(false);
   const sliderId = useId();
 
-  // SVG layout — width-driven. We pick a width and let height fall out
-  // of the 45° geometry: a triangle with width 2h needs height h, so
-  // funnelHeight = funnelWidth / 2. Reserve a strip on the right for
-  // the vote-scale tick labels, and small pads on the other three
-  // sides; the SVG viewBox grows tall just enough to fit.
+  // Live (fractional) vote level shown during a drag for smoothness. While
+  // null, the funnel renders from the committed `votes` prop. Set on
+  // pointerdown/move; cleared on pointerup, where we commit Math.round.
+  const [liveLevel, setLiveLevel] = useState<number | null>(null);
+  const displayVotes = liveLevel ?? votes;
+
+  // SVG layout — width-driven. Funnel height = funnel width / 2 (45° walls).
+  // We reserve a small right-side strip even though we no longer render
+  // tick labels there, so the centred rim doesn't kiss the right edge.
   const PAD_TOP = 14;
   const PAD_LEFT = 14;
+  const PAD_RIGHT = 14;
   const PAD_BOTTOM = 18;
-  const LABEL_W = 30;
-  const funnelWidth = size - PAD_LEFT - LABEL_W;
-  const usableHeight = funnelWidth / 2; // 45° walls
+  const funnelWidth = size - PAD_LEFT - PAD_RIGHT;
+  const usableHeight = funnelWidth / 2;
   const viewBoxH = PAD_TOP + usableHeight + PAD_BOTTOM;
   const cx = PAD_LEFT + funnelWidth / 2;
   const apexY = PAD_TOP + usableHeight;
-  // Convert vote-units to pixels.
   const SCALE = maxVotes > 0 ? usableHeight / maxVotes : 1;
 
-  // Water polygon for the current level.
-  const h = Math.max(0, Math.min(votes, maxVotes)) * SCALE;
-  const waterPath =
-    h > 0 ? `M ${cx} ${apexY} L ${cx - h} ${apexY - h} L ${cx + h} ${apexY - h} Z` : '';
+  // Water polygon for the current display level. We always emit a valid
+  // path (a degenerate triangle collapsed at the apex when h=0) so
+  // Framer Motion can interpolate between empty and filled states
+  // without warning that "" isn't an animatable value.
+  const h = Math.max(0, Math.min(displayVotes, maxVotes)) * SCALE;
+  const waterPath = `M ${cx} ${apexY} L ${cx - h} ${apexY - h} L ${cx + h} ${apexY - h} Z`;
 
-  // Container outline (the funnel itself, drawn at maxVotes).
-  // Path is left-rim → apex → right-rim — two diagonals meeting at the
-  // 90° vertex. The horizontal rim is drawn separately so we can give
-  // it a different stroke treatment (and so a missing-wall bug like
-  // the one fixed in this commit can't recur).
+  // Funnel outline: left-rim → apex → right-rim. The horizontal rim is
+  // drawn separately so the missing-wall bug from v1 (path fell back to
+  // an implicit close that wasn't drawn) can't recur.
   const fullH = usableHeight;
   const outlinePath = `M ${cx - fullH} ${apexY - fullH} L ${cx} ${apexY} L ${cx + fullH} ${apexY - fullH}`;
   const rimY = apexY - fullH;
 
-  // Convert a pointer Y position to a vote level. Above the rim → maxVotes.
-  // Below the apex → 0. Linear in between.
+  // Pointer Y → fractional vote level. Above the rim → cap; below the
+  // apex → 0.
   const yToVotes = useCallback(
     (clientY: number): number => {
       const rect = svgRef.current?.getBoundingClientRect();
       if (!rect) return votes;
-      // Map pointer y onto SVG-local y. The viewBox height is `viewBoxH`;
-      // the rendered height is `rect.height`.
       const localY = ((clientY - rect.top) / rect.height) * viewBoxH;
       const upward = apexY - localY;
       const proposed = upward / SCALE;
-      // Clamp to [0, min(maxVotes, votes + available)] — caller is the
-      // source of truth, but we prevent useless drag noise past the cap.
       const ceiling = Math.min(maxVotes, votes + Math.max(0, available));
       return Math.max(0, Math.min(proposed, ceiling));
     },
@@ -125,42 +117,40 @@ export const Funnel = ({
     e.preventDefault();
     draggingRef.current = true;
     (e.target as Element).setPointerCapture?.(e.pointerId);
-    onChange(yToVotes(e.clientY));
+    setLiveLevel(yToVotes(e.clientY));
   };
 
   const handlePointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (!draggingRef.current) return;
-    onChange(yToVotes(e.clientY));
+    setLiveLevel(yToVotes(e.clientY));
   };
 
   const endDrag = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (!draggingRef.current) return;
     draggingRef.current = false;
     (e.target as Element).releasePointerCapture?.(e.pointerId);
-    onCommit?.(votes);
+    const final = liveLevel != null ? Math.round(liveLevel) : votes;
+    setLiveLevel(null);
+    if (final !== votes) onChange(final);
   };
 
-  // Keyboard accessibility: arrow keys nudge in 0.1-vote increments,
-  // Shift+arrow in 1-vote increments. PageUp/PageDn jump to ±maxVotes.
-  // Home/End set the funnel to 0 / max.
+  // Keyboard accessibility (integer steps).
   const handleKeyDown = (e: KeyboardEvent<SVGSVGElement>) => {
-    const small = 0.1;
-    const big = 1;
     let target = votes;
     switch (e.key) {
       case 'ArrowUp':
       case 'ArrowRight':
-        target = votes + (e.shiftKey ? big : small);
+        target = votes + (e.shiftKey ? 5 : 1);
         break;
       case 'ArrowDown':
       case 'ArrowLeft':
-        target = votes - (e.shiftKey ? big : small);
+        target = votes - (e.shiftKey ? 5 : 1);
         break;
       case 'PageUp':
-        target = votes + big * 5;
+        target = votes + 5;
         break;
       case 'PageDown':
-        target = votes - big * 5;
+        target = votes - 5;
         break;
       case 'Home':
         target = 0;
@@ -174,14 +164,14 @@ export const Funnel = ({
     e.preventDefault();
     const ceiling = Math.min(maxVotes, votes + Math.max(0, available));
     target = Math.max(0, Math.min(target, ceiling));
-    onChange(target);
-    onCommit?.(target);
+    if (target !== votes) onChange(target);
   };
 
-  // Cancel drag if pointer leaves the window without an up event.
+  // Cancel drag if the pointer leaves the window without an up event.
   useEffect(() => {
     const cancel = () => {
       draggingRef.current = false;
+      setLiveLevel(null);
     };
     window.addEventListener('pointerup', cancel);
     window.addEventListener('pointercancel', cancel);
@@ -191,13 +181,7 @@ export const Funnel = ({
     };
   }, []);
 
-  // Tick marks along the side: 0, 25%, 50%, 75%, 100% of capacity.
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((frac) => ({
-    frac,
-    y: apexY - frac * fullH,
-    votes: roundVotes(frac * maxVotes),
-  }));
-
+  const announcedVotes = Math.round(displayVotes);
   return (
     <svg
       ref={svgRef}
@@ -206,9 +190,9 @@ export const Funnel = ({
       role="slider"
       aria-label={label}
       aria-valuemin={0}
-      aria-valuemax={roundVotes(maxVotes)}
-      aria-valuenow={roundVotes(votes)}
-      aria-valuetext={`${roundVotes(votes)} votes, ${roundVotes(votes * votes)} credits`}
+      aria-valuemax={maxVotes}
+      aria-valuenow={announcedVotes}
+      aria-valuetext={`${announcedVotes} ${announcedVotes === 1 ? 'vote' : 'votes'}, ${announcedVotes * announcedVotes} ${announcedVotes * announcedVotes === 1 ? 'credit' : 'credits'}`}
       aria-orientation="vertical"
       tabIndex={0}
       onPointerDown={handlePointerDown}
@@ -237,35 +221,10 @@ export const Funnel = ({
         strokeWidth={1}
       />
 
-      {/* Tick marks for vote scale. Drawn before the funnel so they sit
-          behind the walls. */}
-      <g aria-hidden="true">
-        {ticks.map((t, idx) => (
-          <g key={idx}>
-            <line
-              x1={cx + fullH + 4}
-              x2={cx + fullH + 10}
-              y1={t.y}
-              y2={t.y}
-              stroke="var(--lqv-muted)"
-              strokeWidth={1}
-            />
-            <text
-              x={cx + fullH + 14}
-              y={t.y + 3}
-              fontSize={10}
-              fill="var(--lqv-muted)"
-              fontFamily="'Suisse Intl', system-ui, sans-serif"
-            >
-              {t.votes}
-            </text>
-          </g>
-        ))}
-      </g>
-
       {/* Water — animated. The polygon area equals credits = votes². */}
       <motion.path
         d={waterPath}
+        initial={false}
         fill="var(--lqv-water)"
         animate={{ d: waterPath }}
         transition={{
@@ -282,6 +241,7 @@ export const Funnel = ({
           x2={cx + h}
           y1={apexY - h}
           y2={apexY - h}
+          initial={false}
           stroke="var(--lqv-water-dark)"
           strokeWidth={1.25}
           strokeOpacity={0.7}
@@ -309,8 +269,9 @@ export const Funnel = ({
         strokeLinejoin="round"
       />
 
-      {/* Rim flourish — a short horizontal at the top of the funnel
-          marking the maxVotes capacity. */}
+      {/* Rim — short horizontal at the top of the funnel marking the cap.
+          Water hitting this line communicates "this funnel is full" without
+          a separate label. */}
       <line
         x1={cx - fullH}
         x2={cx + fullH}
