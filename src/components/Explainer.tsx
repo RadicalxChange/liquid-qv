@@ -42,7 +42,7 @@ export const undoDismissExplainer = (): void => {
 
 interface Step {
   title: string;
-  body: string;
+  body?: string;
   illustration: () => JSX.Element;
 }
 
@@ -114,8 +114,7 @@ const STEPS: Step[] = [
     ),
   },
   {
-    title: 'Pour to vote — but the level rises slower as you pour.',
-    body: 'A funnel’s water area is its credit cost; height is the votes counted. Doubling votes quadruples cost.',
+    title: 'Pour to vote. The level rises slower as you pour.',
     illustration: () => (
       <div className="flex items-center gap-3">
         <FunnelGlyph fill={0.25} />
@@ -125,8 +124,7 @@ const STEPS: Step[] = [
     ),
   },
   {
-    title: 'Spreading credits is cheap; concentrating is expensive.',
-    body: 'Two funnels at one vote each cost two credits. One funnel at two votes costs four.',
+    title: 'Spreading credits across funnels is cheap. Concentrating is expensive.',
     illustration: () => <SpreadGlyph />,
   },
 ];
@@ -183,9 +181,11 @@ export const Explainer = ({ open, onDismiss }: Props) => {
                     </span>
                     {step.title}
                   </p>
-                  <p className="text-size--2" style={{ color: 'var(--lqv-muted)' }}>
-                    {step.body}
-                  </p>
+                  {step.body && (
+                    <p className="text-size--2" style={{ color: 'var(--lqv-muted)' }}>
+                      {step.body}
+                    </p>
+                  )}
                 </li>
               ))}
             </ol>

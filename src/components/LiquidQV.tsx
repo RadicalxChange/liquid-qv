@@ -2,13 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer } from 'react';
 import { CreditPool } from './CreditPool';
 import { Funnel } from './Funnel';
 import { TransferIndicator } from './TransferIndicator';
-import {
-  costForVotes,
-  maxVotes as capFor,
-  remainingCredits,
-  roundVotes,
-  votesForCredits,
-} from '../math/qv';
+import { costForVotes, maxVotes as capFor, remainingCredits } from '../math/qv';
 import { initialState, reducer } from '../lib/reducer';
 import { defaultBallot, BALLOT_PROMPT } from '../data/defaultBallot';
 import type { LiquidQVProps, ThemeOverrides } from '../types';
@@ -21,14 +15,9 @@ import type { LiquidQVProps, ThemeOverrides } from '../types';
  *
  *     pool + Σ funnel_volumes = budget
  *
- * so we never have to remember to keep the visual layers in sync — the
- * pool, every funnel, and the transient transfer indicator all derive
- * from the same `votes` map.
- *
- * Layout:
- *   <Pool> ─────────────────────────────────────────────  (row 1: budget)
- *   <Transfer> <Transfer> <Transfer> ... per item       (row 2: flow)
- *   <Funnel>  <Funnel>   <Funnel>   ... per item        (row 3: levels)
+ * so the pool, every funnel, and the transient transfer indicator all
+ * derive from the same `votes` map. Polish round 2: votes are integers
+ * end-to-end; the UI is stripped to the funnel + pool + a tiny readout.
  */
 
 const themeToCssVars = (theme: ThemeOverrides | undefined): Record<string, string> => {
@@ -66,9 +55,7 @@ export const LiquidQV = ({
     ({ budget, ids }) => initialState(budget, ids),
   );
 
-  // Keep the reducer's budget in sync with the prop. Re-clamping is
-  // handled inside the reducer so existing votes don't break invariants
-  // when a parent shrinks the budget mid-session.
+  // Keep the reducer's budget in sync with the prop.
   useEffect(() => {
     if (state.budget !== creditBudget) {
       dispatch({ type: 'set-budget', budget: creditBudget });
@@ -83,9 +70,9 @@ export const LiquidQV = ({
   const cap = capFor(state.budget);
   const remaining = remainingCredits(state.budget, state.votes);
 
-  // Available votes for an item = how much more it could absorb without
-  // breaking the invariant. We pass this to <Funnel> so dragging caps
-  // softly at the pool ceiling rather than producing a snap-back.
+  // How many more whole votes this item can absorb without breaking the
+  // invariant. Passed to <Funnel> so dragging caps softly at the pool
+  // ceiling rather than producing a snap-back.
   const availableForItem = useCallback(
     (id: string): number => {
       const current = state.votes[id] ?? 0;
@@ -93,7 +80,7 @@ export const LiquidQV = ({
         .filter(([k]) => k !== id)
         .reduce((acc, [, v]) => acc + costForVotes(v), 0);
       const availCredits = Math.max(0, state.budget - othersCost);
-      const ceilingVotes = Math.min(cap, votesForCredits(availCredits));
+      const ceilingVotes = Math.min(cap, Math.floor(Math.sqrt(availCredits)));
       return Math.max(0, ceilingVotes - current);
     },
     [state.votes, state.budget, cap],
@@ -112,7 +99,8 @@ export const LiquidQV = ({
     if (!state.transfer) return '';
     const item = items.find((i) => i.id === state.transfer!.itemId);
     const v = state.votes[state.transfer.itemId] ?? 0;
-    return `${item?.title ?? state.transfer.itemId}: ${roundVotes(v).toFixed(2)} votes, ${roundVotes(costForVotes(v)).toFixed(2)} credits.`;
+    const c = costForVotes(v);
+    return `${item?.title ?? state.transfer.itemId}: ${v} ${v === 1 ? 'vote' : 'votes'}, ${c} ${c === 1 ? 'credit' : 'credits'}.`;
   }, [state.transfer, state.votes, items]);
 
   return (
@@ -143,6 +131,9 @@ export const LiquidQV = ({
         {items.map((item) => {
           const v = state.votes[item.id] ?? 0;
           const credits = costForVotes(v);
+          const available = availableForItem(item.id);
+          const canAdd = available > 0;
+          const canSubtract = v > 0;
           return (
             <div
               key={item.id}
@@ -153,21 +144,14 @@ export const LiquidQV = ({
               }}
             >
               <div className="mb-2 flex items-baseline justify-between gap-2">
-                <div className="min-w-0">
-                  <h3 className="font-display text-size-1 leading-none truncate">
-                    {item.title}
-                    {item.tag ? (
-                      <span className="ml-2 align-middle text-size--2 font-body text-[var(--lqv-muted)]">
-                        ({item.tag})
-                      </span>
-                    ) : null}
-                  </h3>
-                  {item.description ? (
-                    <p className="text-size--2 text-[var(--lqv-muted)] mt-1 line-clamp-2">
-                      {item.description}
-                    </p>
+                <h3 className="font-display text-size-1 leading-none truncate min-w-0">
+                  {item.title}
+                  {item.tag ? (
+                    <span className="ml-2 align-middle text-size--2 font-body text-[var(--lqv-muted)]">
+                      ({item.tag})
+                    </span>
                   ) : null}
-                </div>
+                </h3>
                 <button
                   type="button"
                   onClick={() => resetItem(item.id)}
@@ -189,65 +173,62 @@ export const LiquidQV = ({
               <Funnel
                 votes={v}
                 maxVotes={cap}
-                available={availableForItem(item.id)}
+                available={available}
                 onChange={(next) => setItemVotes(item.id, next)}
                 label={`Votes for ${item.title}`}
               />
 
-              <dl className="mt-2 flex items-baseline justify-between gap-2 text-size--2 font-body">
-                <div>
-                  <dt className="sr-only">Votes</dt>
-                  <dd className="tabular-nums">
-                    <span className="text-[var(--lqv-muted)] mr-1">votes</span>
-                    <span className="font-medium">{roundVotes(v).toFixed(2)}</span>
-                  </dd>
-                </div>
-                <div>
-                  <dt className="sr-only">Credits spent</dt>
-                  <dd className="tabular-nums text-[var(--lqv-muted)]">
-                    {credits.toFixed(2)} credits
-                  </dd>
-                </div>
-              </dl>
-              {/* Marginal-cost cue. (v+1)² − v² = 2v + 1 — the next whole
-                  vote costs more than the previous one. Surfacing the
-                  number drives the lesson home for users who haven't
-                  internalised the slope yet. */}
-              {v < cap && (
-                <p className="mt-1 text-size--3 text-[var(--lqv-muted)]">
-                  Next +1 vote = <span className="tabular-nums">{(2 * v + 1).toFixed(2)}</span>{' '}
-                  credits
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <p
+                  className="font-display text-size-1 leading-none tabular-nums"
+                  style={{ color: 'var(--lqv-fg)' }}
+                  aria-live="off"
+                >
+                  {v} {v === 1 ? 'vote' : 'votes'}
+                  {v > 0 && (
+                    <span className="ml-2 text-size--2 font-body text-[var(--lqv-muted)] tabular-nums">
+                      {credits} {credits === 1 ? 'credit' : 'credits'}
+                    </span>
+                  )}
                 </p>
-              )}
 
-              {/* Numeric input fallback. Submitting recalculates the
-                  allocation through the same reducer path. */}
-              <label className="mt-2 flex items-center gap-2 text-size--3 text-[var(--lqv-muted)]">
-                <span>Set votes</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={cap}
-                  step={0.1}
-                  value={Number.isFinite(v) ? roundVotes(v) : 0}
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    if (Number.isFinite(n)) setItemVotes(item.id, n);
-                  }}
-                  className="w-20 rounded border bg-white px-2 py-1 font-body text-size--2 tabular-nums"
-                  style={{ borderColor: 'var(--lqv-funnel-wall)' }}
-                  aria-label={`Numeric vote input for ${item.title}`}
-                />
-              </label>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setItemVotes(item.id, v - 1)}
+                    disabled={!canSubtract}
+                    aria-label={`Subtract one vote from ${item.title}`}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border text-size-0 leading-none disabled:opacity-30"
+                    style={{
+                      borderColor: 'var(--lqv-funnel-wall)',
+                      color: 'var(--lqv-fg)',
+                      background: 'var(--lqv-funnel-bg)',
+                    }}
+                  >
+                    −
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setItemVotes(item.id, v + 1)}
+                    disabled={!canAdd}
+                    aria-label={`Add one vote to ${item.title}`}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border text-size-0 leading-none disabled:opacity-30"
+                    style={{
+                      borderColor: 'var(--lqv-funnel-wall)',
+                      color: 'var(--lqv-fg)',
+                      background: 'var(--lqv-funnel-bg)',
+                    }}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
             </div>
           );
         })}
       </div>
 
-      <div className="mt-6 flex items-center justify-between">
-        <p className="text-size--2 text-[var(--lqv-muted)]">
-          Cap per funnel: {cap} votes (= {state.budget} credits if alone).
-        </p>
+      <div className="mt-6 flex justify-end">
         <button
           type="button"
           onClick={resetAll}

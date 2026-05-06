@@ -6,11 +6,4 @@
 export { LiquidQV } from '../components/LiquidQV';
 export type { BallotItem, LiquidQVProps, ThemeOverrides, VoteMap } from '../types';
 export { defaultBallot, BALLOT_PROMPT, BALLOT_SNAPSHOT_DATE } from '../data/defaultBallot';
-export {
-  costForVotes,
-  votesForCredits,
-  marginalCost,
-  maxVotes,
-  totalCreditsSpent,
-  remainingCredits,
-} from '../math/qv';
+export { costForVotes, maxVotes, totalCreditsSpent, remainingCredits } from '../math/qv';

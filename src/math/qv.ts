@@ -1,20 +1,20 @@
 /**
  * Quadratic Voting math primitives.
  *
- * The whole tool turns on these three identities:
+ * Two identities anchor the whole tool:
  *
- *   credits  = votes²                (cost is quadratic in vote count)
- *   votes    = √credits              (vote count is sqrt of credits spent)
- *   d/dv c   = 2v                    (marginal cost rises linearly)
+ *   credits = votes²
+ *   votes   = √credits
  *
- * Geometry maps these onto a 90° inverted-triangle funnel with apex down.
- * If h is the water height (= votes) and the walls are at 45°, the
- * cross-section at height h has width 2h, so the area below height h is
+ * Geometrically, a 90°-apex funnel with 45° walls turns these into the
+ * water-area / water-height correspondence the UI relies on: cross-section
+ * width at height h is 2h, so area below height h is h². Pouring water is
+ * pouring credits; the visible surface level is the vote count.
  *
- *   A(h) = ½ · 2h · h = h²
- *
- * which matches credits = votes² *by construction*. Pouring water is
- * pouring credits; the surface level you see is the vote count counted.
+ * v1 polish: votes are whole numbers. The UI snaps to integers on
+ * pointer-release, the reducer stores integers, and clampVotesAgainstBudget
+ * returns the largest *integer* that fits the remaining pool. Inputs may
+ * still arrive fractional from drag positions; floor at the boundary.
  *
  * All functions are pure and clamped at zero — negative votes are out of
  * scope for v1 (see project README for v2 plans).
@@ -22,27 +22,19 @@
 
 export const costForVotes = (votes: number): number => {
   if (!Number.isFinite(votes) || votes <= 0) return 0;
-  return votes * votes;
-};
-
-export const votesForCredits = (credits: number): number => {
-  if (!Number.isFinite(credits) || credits <= 0) return 0;
-  return Math.sqrt(credits);
-};
-
-export const marginalCost = (votes: number): number => {
-  if (!Number.isFinite(votes) || votes <= 0) return 0;
-  return 2 * votes;
+  const n = Math.floor(votes);
+  return n * n;
 };
 
 /**
- * Maximum votes a single funnel can hold given the budget.
- * If you cap at √budget, a single fully-loaded funnel drains the pool
- * exactly — anchoring the "all eggs in one basket" cost visually.
+ * Maximum integer votes a single funnel can hold given the budget.
+ * For an integer budget like 100, this is exactly 10 — a single fully
+ * loaded funnel drains the pool exactly. For non-square budgets it
+ * leaves a small remainder (e.g. budget 50 → cap 7, leaves 1).
  */
 export const maxVotes = (budget: number): number => {
   if (!Number.isFinite(budget) || budget <= 0) return 0;
-  return Math.sqrt(budget);
+  return Math.floor(Math.sqrt(budget));
 };
 
 /** Sum of credits spent across all vote allocations. */
@@ -58,9 +50,10 @@ export const remainingCredits = (budget: number, votes: Record<string, number>):
 };
 
 /**
- * Clamp a proposed new vote level on a single item against the global
- * pool. Returns the largest legal `proposedVotes` value given the spend
- * already committed to *other* items.
+ * Clamp a proposed vote level (possibly fractional, e.g. from a drag) to
+ * the largest *integer* that respects the global pool and the per-funnel
+ * cap. Used both as a guard on user input and as the canonical setter
+ * inside the reducer.
  */
 export const clampVotesAgainstBudget = (
   proposedVotes: number,
@@ -70,7 +63,7 @@ export const clampVotesAgainstBudget = (
 ): number => {
   if (!Number.isFinite(proposedVotes) || proposedVotes <= 0) return 0;
   const cap = maxVotes(budget);
-  const target = Math.min(proposedVotes, cap);
+  const target = Math.min(Math.floor(proposedVotes), cap);
 
   // Credits already locked by other items.
   let othersCost = 0;
@@ -79,12 +72,8 @@ export const clampVotesAgainstBudget = (
     othersCost += costForVotes(v);
   }
   const availableForThis = Math.max(0, budget - othersCost);
-  const ceilingFromBudget = votesForCredits(availableForThis);
+  // Largest integer v such that v² ≤ availableForThis.
+  const ceilingFromBudget = Math.floor(Math.sqrt(availableForThis));
 
-  return Math.min(target, ceilingFromBudget);
-};
-
-/** Round a vote level to 2 decimals — UI display precision. */
-export const roundVotes = (votes: number): number => {
-  return Math.round(votes * 100) / 100;
+  return Math.max(0, Math.min(target, ceilingFromBudget));
 };
