@@ -8,9 +8,9 @@ export type { BallotItem, LiquidQVProps, ThemeOverrides, VoteMap } from '../type
 export { defaultBallot, BALLOT_PROMPT, BALLOT_SNAPSHOT_DATE } from '../data/defaultBallot';
 export {
   availableCreditsFor,
+  clampVotesAgainstBudget,
   costForVotes,
   maxVotes,
   remainingCredits,
-  remainingCreditsContinuous,
   totalCreditsSpent,
 } from '../math/qv';

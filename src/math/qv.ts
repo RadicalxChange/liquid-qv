@@ -11,15 +11,11 @@
  * width at height h is 2h, so area below height h is h². Pouring water is
  * pouring credits; the visible surface level is the vote count.
  *
- * Round 5 (hold-to-pour): votes are whole numbers at rest, but a "live"
- * pour gesture (hold + or −) flows credits at a constant volumetric rate
- * and renders fractional votes during the hold so the quadratic is *felt*
- * (constant input rate, decreasing rise rate as the funnel widens). The
- * reducer still stores integers; fractional values exist only in derived
- * UI state during an active pour, and snap to the nearest integer on
- * release. The integer math primitives below stay canonical; the UI
- * computes its live quantities directly with v*v / Math.sqrt and reaches
- * for `costForVotes` / `clampVotesAgainstBudget` only at commit time.
+ * Round 6 (continuous votes): votes and credits are real-valued
+ * end-to-end. There is no integer mode and no rounding in the math
+ * layer. A single press obeys the same physics as a long hold —
+ * transferred credits = duration × rate. Display-time rounding to one
+ * decimal lives in the components, never here.
  *
  * All functions are pure and clamped at zero — negative votes are out of
  * scope (see project README for v2 plans).
@@ -27,22 +23,20 @@
 
 export const costForVotes = (votes: number): number => {
   if (!Number.isFinite(votes) || votes <= 0) return 0;
-  const n = Math.floor(votes);
-  return n * n;
+  return votes * votes;
 };
 
 /**
- * Maximum integer votes a single funnel can hold given the budget.
- * For an integer budget like 100, this is exactly 10 — a single fully
- * loaded funnel drains the pool exactly. For non-square budgets it
- * leaves a small remainder (e.g. budget 50 → cap 7, leaves 1).
+ * Maximum votes a single funnel can hold given the budget. For an
+ * integer budget of 100, this is exactly √100 = 10 — a single
+ * fully-loaded funnel drains the pool exactly.
  */
 export const maxVotes = (budget: number): number => {
   if (!Number.isFinite(budget) || budget <= 0) return 0;
-  return Math.floor(Math.sqrt(budget));
+  return Math.sqrt(budget);
 };
 
-/** Sum of credits spent across all vote allocations. */
+/** Sum of credits spent across all vote allocations (real-valued). */
 export const totalCreditsSpent = (votes: Record<string, number>): number => {
   let sum = 0;
   for (const v of Object.values(votes)) sum += costForVotes(v);
@@ -55,26 +49,9 @@ export const remainingCredits = (budget: number, votes: Record<string, number>):
 };
 
 /**
- * Continuous version of `remainingCredits` — uses raw v*v (no flooring)
- * so it stays consistent with a pour-in-progress where one item's vote
- * count is a real value.
- */
-export const remainingCreditsContinuous = (
-  budget: number,
-  votes: Record<string, number>,
-): number => {
-  let sum = 0;
-  for (const v of Object.values(votes)) {
-    if (Number.isFinite(v) && v > 0) sum += v * v;
-  }
-  return Math.max(0, budget - sum);
-};
-
-/**
- * Maximum continuous credits a single funnel can absorb given the rest
- * of the budget already locked elsewhere — i.e. the largest c such that
- * other_costs + c ≤ budget. Used by the hold-to-pour loop to clamp the
- * live water level against the pool.
+ * Maximum credits a single funnel can absorb given the rest of the
+ * budget already locked elsewhere. Used by the hold-to-pour loop to
+ * clamp the live water level against the pool.
  */
 export const availableCreditsFor = (
   itemId: string,
@@ -84,16 +61,15 @@ export const availableCreditsFor = (
   let othersCost = 0;
   for (const [id, v] of Object.entries(votes)) {
     if (id === itemId) continue;
-    if (Number.isFinite(v) && v > 0) othersCost += v * v;
+    othersCost += costForVotes(v);
   }
   return Math.max(0, budget - othersCost);
 };
 
 /**
- * Clamp a proposed vote level (possibly fractional, e.g. from a drag) to
- * the largest *integer* that respects the global pool and the per-funnel
- * cap. Used both as a guard on user input and as the canonical setter
- * inside the reducer.
+ * Clamp a proposed (real-valued) vote level to the legal range — at
+ * most √budget per funnel, and at most √(budget − others' credits).
+ * Returns a real number; rounding is the display layer's problem.
  */
 export const clampVotesAgainstBudget = (
   proposedVotes: number,
@@ -103,17 +79,6 @@ export const clampVotesAgainstBudget = (
 ): number => {
   if (!Number.isFinite(proposedVotes) || proposedVotes <= 0) return 0;
   const cap = maxVotes(budget);
-  const target = Math.min(Math.floor(proposedVotes), cap);
-
-  // Credits already locked by other items.
-  let othersCost = 0;
-  for (const [id, v] of Object.entries(votes)) {
-    if (id === itemId) continue;
-    othersCost += costForVotes(v);
-  }
-  const availableForThis = Math.max(0, budget - othersCost);
-  // Largest integer v such that v² ≤ availableForThis.
-  const ceilingFromBudget = Math.floor(Math.sqrt(availableForThis));
-
-  return Math.max(0, Math.min(target, ceilingFromBudget));
+  const ceilingFromBudget = Math.sqrt(availableCreditsFor(itemId, votes, budget));
+  return Math.max(0, Math.min(proposedVotes, cap, ceilingFromBudget));
 };
