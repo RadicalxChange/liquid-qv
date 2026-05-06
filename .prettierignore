@@ -1,0 +1,7 @@
+dist
+dist-lib
+dist-wc
+node_modules
+coverage
+public
+*.md

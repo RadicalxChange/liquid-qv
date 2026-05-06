@@ -1,0 +1,91 @@
+{
+  "name": "@radicalxchange/liquid-qv",
+  "private": false,
+  "version": "0.1.0",
+  "description": "Liquid QV — a visual-first Quadratic Voting demo by RadicalxChange. Funnel-and-pool metaphor that makes the quadratic cost relationship visible.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/RadicalxChange/liquid-qv",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RadicalxChange/liquid-qv.git"
+  },
+  "main": "./dist-lib/liquid-qv.umd.cjs",
+  "module": "./dist-lib/liquid-qv.js",
+  "types": "./dist-lib/lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist-lib/lib/index.d.ts",
+      "import": "./dist-lib/liquid-qv.js",
+      "require": "./dist-lib/liquid-qv.umd.cjs"
+    },
+    "./style.css": "./dist-lib/liquid-qv.css"
+  },
+  "files": [
+    "dist-lib",
+    "dist-wc",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:lib": "tsc -b && vite build --mode lib && tsc -p tsconfig.lib.json",
+    "build:wc": "tsc -b && vite build --mode wc",
+    "build:all": "npm run build && npm run build:lib && npm run build:wc",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc -b --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "dependencies": {
+    "framer-motion": "^11.11.17"
+  },
+  "devDependencies": {
+    "@r2wc/react-to-web-component": "^2.0.3",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@typescript-eslint/eslint-plugin": "^8.18.2",
+    "@typescript-eslint/parser": "^8.18.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react": "^7.37.3",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "globals": "^15.14.0",
+    "happy-dom": "^20.9.0",
+    "postcss": "^8.4.49",
+    "prettier": "^3.4.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.7.2",
+    "typescript-eslint": "^8.18.2",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "quadratic-voting",
+    "qv",
+    "voting",
+    "radicalxchange",
+    "rxc",
+    "demo",
+    "react",
+    "web-component"
+  ]
+}

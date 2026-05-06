@@ -1,0 +1,55 @@
+/*
+ * Font faces — Messer (display) and Suisse Intl (body).
+ * Files copied from RadicalxChange/www/dist/fonts at scaffold time.
+ * If these are updated upstream, refresh public/fonts/ and verify here.
+ */
+
+@font-face {
+  font-family: 'Messer';
+  src:
+    url('/fonts/hinted-MesserV20-Condensed.woff2') format('woff2'),
+    url('/fonts/hinted-MesserV20-Condensed.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src:
+    url('/fonts/hinted-SuisseIntl-Regular.woff2') format('woff2'),
+    url('/fonts/hinted-SuisseIntl-Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src:
+    url('/fonts/hinted-SuisseIntl-Medium.woff2') format('woff2'),
+    url('/fonts/hinted-SuisseIntl-Medium.woff') format('woff');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src:
+    url('/fonts/hinted-SuisseIntl-Bold.woff2') format('woff2'),
+    url('/fonts/hinted-SuisseIntl-Bold.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl Book';
+  src:
+    url('/fonts/hinted-SuisseIntl-Book.woff2') format('woff2'),
+    url('/fonts/hinted-SuisseIntl-Book.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}

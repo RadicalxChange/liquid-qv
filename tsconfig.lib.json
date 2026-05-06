@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationMap": true,
+    "outDir": "dist-lib",
+    "rootDir": "src",
+    "composite": false
+  },
+  "include": [
+    "src/lib/**/*",
+    "src/components/**/*",
+    "src/math/qv.ts",
+    "src/types/**/*",
+    "src/hooks/**/*",
+    "src/data/**/*"
+  ],
+  "exclude": ["src/**/*.test.{ts,tsx}", "src/wc/**", "src/main.tsx", "src/App.tsx", "src/test-setup.ts"]
+}
