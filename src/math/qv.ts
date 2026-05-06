@@ -11,13 +11,18 @@
  * width at height h is 2h, so area below height h is h². Pouring water is
  * pouring credits; the visible surface level is the vote count.
  *
- * v1 polish: votes are whole numbers. The UI snaps to integers on
- * pointer-release, the reducer stores integers, and clampVotesAgainstBudget
- * returns the largest *integer* that fits the remaining pool. Inputs may
- * still arrive fractional from drag positions; floor at the boundary.
+ * Round 5 (hold-to-pour): votes are whole numbers at rest, but a "live"
+ * pour gesture (hold + or −) flows credits at a constant volumetric rate
+ * and renders fractional votes during the hold so the quadratic is *felt*
+ * (constant input rate, decreasing rise rate as the funnel widens). The
+ * reducer still stores integers; fractional values exist only in derived
+ * UI state during an active pour, and snap to the nearest integer on
+ * release. The integer math primitives below stay canonical; the UI
+ * computes its live quantities directly with v*v / Math.sqrt and reaches
+ * for `costForVotes` / `clampVotesAgainstBudget` only at commit time.
  *
  * All functions are pure and clamped at zero — negative votes are out of
- * scope for v1 (see project README for v2 plans).
+ * scope (see project README for v2 plans).
  */
 
 export const costForVotes = (votes: number): number => {
@@ -47,6 +52,41 @@ export const totalCreditsSpent = (votes: Record<string, number>): number => {
 /** Pool invariant: pool = budget − Σ votes². Floored at 0. */
 export const remainingCredits = (budget: number, votes: Record<string, number>): number => {
   return Math.max(0, budget - totalCreditsSpent(votes));
+};
+
+/**
+ * Continuous version of `remainingCredits` — uses raw v*v (no flooring)
+ * so it stays consistent with a pour-in-progress where one item's vote
+ * count is a real value.
+ */
+export const remainingCreditsContinuous = (
+  budget: number,
+  votes: Record<string, number>,
+): number => {
+  let sum = 0;
+  for (const v of Object.values(votes)) {
+    if (Number.isFinite(v) && v > 0) sum += v * v;
+  }
+  return Math.max(0, budget - sum);
+};
+
+/**
+ * Maximum continuous credits a single funnel can absorb given the rest
+ * of the budget already locked elsewhere — i.e. the largest c such that
+ * other_costs + c ≤ budget. Used by the hold-to-pour loop to clamp the
+ * live water level against the pool.
+ */
+export const availableCreditsFor = (
+  itemId: string,
+  votes: Record<string, number>,
+  budget: number,
+): number => {
+  let othersCost = 0;
+  for (const [id, v] of Object.entries(votes)) {
+    if (id === itemId) continue;
+    if (Number.isFinite(v) && v > 0) othersCost += v * v;
+  }
+  return Math.max(0, budget - othersCost);
 };
 
 /**

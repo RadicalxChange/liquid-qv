@@ -18,17 +18,25 @@ import { motion, useReducedMotion } from 'framer-motion';
  */
 
 interface Props {
+  /** Continuous remaining credits (may be fractional during a hold). */
   remaining: number;
   budget: number;
+  /**
+   * Pre-formatted numeric readout. Round 5 lets the parent pass an
+   * integer string at rest and a one-decimal string during a hold —
+   * the only place decimals are visible in the tool, by design.
+   */
+  readout?: string;
   /** Optional pixel height of the pool. Defaults to a fluid-ish value. */
   height?: number;
 }
 
-export const CreditPool = ({ remaining, budget, height = 84 }: Props) => {
+export const CreditPool = ({ remaining, budget, readout, height = 84 }: Props) => {
   const reduceMotion = useReducedMotion();
   const fillRatio = budget > 0 ? Math.max(0, Math.min(1, remaining / budget)) : 0;
-  // Polish round 2: votes (and therefore credits) are integers.
+  // ARIA value stays integer — screen readers don't want intra-hold noise.
   const remainingInt = Math.round(remaining);
+  const display = readout ?? remainingInt.toString();
 
   return (
     <div
@@ -79,10 +87,12 @@ export const CreditPool = ({ remaining, budget, height = 84 }: Props) => {
         </div>
 
         {/* Single understated readout — the bar is the hero, the
-            number is supporting context. */}
+            number is supporting context. Round 5: parent may pass a
+            one-decimal `readout` during an active pour so the number
+            visibly tracks the volumetric drain in real time. */}
         <div className="relative flex h-full items-center px-4 md:px-6">
           <span className="font-display text-size-1 md:text-size-2 leading-none text-white drop-shadow-[0_1px_0_rgba(0,0,0,0.25)] tabular-nums">
-            {remainingInt}
+            {display}
             <span className="ml-1 font-body text-size--2 md:text-size--1 text-white/85">
               / {budget} credits
             </span>
