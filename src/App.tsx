@@ -7,10 +7,7 @@ export const App = () => {
   const explainer = useExplainer();
 
   return (
-    <PageChrome
-      snapshotDate={BALLOT_SNAPSHOT_DATE}
-      onShowExplainer={explainer.show}
-    >
+    <PageChrome snapshotDate={BALLOT_SNAPSHOT_DATE} onShowExplainer={explainer.show}>
       <Explainer open={explainer.open} onDismiss={explainer.dismiss} />
       <LiquidQV />
     </PageChrome>

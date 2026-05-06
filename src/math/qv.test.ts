@@ -87,7 +87,7 @@ describe('clampVotesAgainstBudget', () => {
     expect(clampVotesAgainstBudget(99, 'a', {}, 100)).toBe(10);
   });
 
-  it("respects credits already locked by other items", () => {
+  it('respects credits already locked by other items', () => {
     // Other items already spending 64 credits → 36 left → max 6 votes here.
     expect(clampVotesAgainstBudget(99, 'a', { b: 8 }, 100)).toBeCloseTo(6);
   });

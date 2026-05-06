@@ -41,10 +41,7 @@ export const TransferIndicator = ({ itemId, transfer, budget, onComplete }: Prop
   // Use the transfer id as the cleanup token to avoid races.
   useEffect(() => {
     if (!active) return;
-    const t = window.setTimeout(
-      () => onComplete(active.id),
-      reduceMotion ? 60 : 480,
-    );
+    const t = window.setTimeout(() => onComplete(active.id), reduceMotion ? 60 : 480);
     return () => window.clearTimeout(t);
   }, [active, onComplete, reduceMotion]);
 
@@ -73,7 +70,7 @@ export const TransferIndicator = ({ itemId, transfer, budget, onComplete }: Prop
             }}
             animate={{
               opacity: [0, 0.95, 0.95, 0],
-              y: isOutbound ? [(-8), 0, 6, 14] : [8, 0, -6, -14],
+              y: isOutbound ? [-8, 0, 6, 14] : [8, 0, -6, -14],
               height: streakHeight,
             }}
             exit={{ opacity: 0 }}

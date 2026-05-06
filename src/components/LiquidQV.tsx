@@ -103,15 +103,9 @@ export const LiquidQV = ({
     (id: string, votes: number) => dispatch({ type: 'set', itemId: id, votes }),
     [],
   );
-  const resetItem = useCallback(
-    (id: string) => dispatch({ type: 'reset', itemId: id }),
-    [],
-  );
+  const resetItem = useCallback((id: string) => dispatch({ type: 'reset', itemId: id }), []);
   const resetAll = useCallback(() => dispatch({ type: 'reset-all' }), []);
-  const clearTransfer = useCallback(
-    (id: number) => dispatch({ type: 'clear-transfer', id }),
-    [],
-  );
+  const clearTransfer = useCallback((id: number) => dispatch({ type: 'clear-transfer', id }), []);
 
   const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
   const liveAnnouncement = useMemo(() => {
@@ -129,9 +123,7 @@ export const LiquidQV = ({
     >
       <header className="mb-4 md:mb-6">
         {heading && (
-          <h2 className="font-display text-size-3 md:text-size-4 leading-none mb-2">
-            {heading}
-          </h2>
+          <h2 className="font-display text-size-3 md:text-size-4 leading-none mb-2">{heading}</h2>
         )}
         {(prompt ?? BALLOT_PROMPT) && (
           <p className="font-body text-size-0 max-w-[60ch]" style={{ color: 'var(--lqv-fg)' }}>
@@ -223,7 +215,8 @@ export const LiquidQV = ({
                   internalised the slope yet. */}
               {v < cap && (
                 <p className="mt-1 text-size--3 text-[var(--lqv-muted)]">
-                  Next +1 vote = <span className="tabular-nums">{(2 * v + 1).toFixed(2)}</span> credits
+                  Next +1 vote = <span className="tabular-nums">{(2 * v + 1).toFixed(2)}</span>{' '}
+                  credits
                 </p>
               )}
 

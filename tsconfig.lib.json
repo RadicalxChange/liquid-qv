@@ -17,5 +17,11 @@
     "src/hooks/**/*",
     "src/data/**/*"
   ],
-  "exclude": ["src/**/*.test.{ts,tsx}", "src/wc/**", "src/main.tsx", "src/App.tsx", "src/test-setup.ts"]
+  "exclude": [
+    "src/**/*.test.{ts,tsx}",
+    "src/wc/**",
+    "src/main.tsx",
+    "src/App.tsx",
+    "src/test-setup.ts"
+  ]
 }

@@ -40,10 +40,7 @@ export const PageChrome = ({ children, snapshotDate, onShowExplainer }: Props) =
       className="min-h-dvh flex flex-col"
       style={{ background: 'var(--lqv-bg)', color: 'var(--lqv-fg)' }}
     >
-      <header
-        className="border-b"
-        style={{ borderColor: 'var(--lqv-funnel-wall)' }}
-      >
+      <header className="border-b" style={{ borderColor: 'var(--lqv-funnel-wall)' }}>
         <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between px-4 py-3 md:px-8 md:py-4">
           <a
             href="https://www.radicalxchange.org/"
@@ -74,24 +71,15 @@ export const PageChrome = ({ children, snapshotDate, onShowExplainer }: Props) =
 
       <main className="flex-1">{children}</main>
 
-      <footer
-        className="border-t"
-        style={{ borderColor: 'var(--lqv-funnel-wall)' }}
-      >
+      <footer className="border-t" style={{ borderColor: 'var(--lqv-funnel-wall)' }}>
         <div className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-8 md:py-8">
-          <p
-            className="font-body text-size--2 max-w-[80ch]"
-            style={{ color: 'var(--lqv-fg)' }}
-          >
-            Liquid QV is a mechanism-design demonstration. The default
-            ballot lists the top six eligible 2028 US presidential candidates
-            by Polymarket and Kalshi prediction-market odds (overall
-            presidential winner markets) as of {snapshotDate}. None has
-            formally announced a campaign. RadicalxChange Foundation is a
-            501(c)(3) nonprofit and does not support or oppose any candidate
-            for public office; the list is illustrative of how Quadratic
-            Voting captures preference intensity, not an endorsement of any
-            candidate or party.
+          <p className="font-body text-size--2 max-w-[80ch]" style={{ color: 'var(--lqv-fg)' }}>
+            Liquid QV is a mechanism-design demonstration. The default ballot lists the top six
+            eligible 2028 US presidential candidates by Polymarket and Kalshi prediction-market odds
+            (overall presidential winner markets) as of {snapshotDate}. None has formally announced
+            a campaign. RadicalxChange Foundation is a 501(c)(3) nonprofit and does not support or
+            oppose any candidate for public office; the list is illustrative of how Quadratic Voting
+            captures preference intensity, not an endorsement of any candidate or party.
           </p>
           <p className="mt-4 text-size--3" style={{ color: 'var(--lqv-muted)' }}>
             Built by{' '}

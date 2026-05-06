@@ -74,7 +74,16 @@ const FunnelGlyph = ({ fill }: { fill: number }) => {
 const PoolGlyph = () => (
   <svg viewBox="0 0 80 40" width={80} height={40} aria-hidden="true">
     <rect x="2" y="6" width="76" height="20" rx="6" fill="var(--lqv-pool)" />
-    <rect x="2" y="6" width="76" height="20" rx="6" fill="none" stroke="var(--lqv-water-dark)" strokeWidth={1.5} />
+    <rect
+      x="2"
+      y="6"
+      width="76"
+      height="20"
+      rx="6"
+      fill="none"
+      stroke="var(--lqv-water-dark)"
+      strokeWidth={1.5}
+    />
   </svg>
 );
 
@@ -162,10 +171,7 @@ export const Explainer = ({ open, onDismiss }: Props) => {
             <ol className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
               {STEPS.map((step, i) => (
                 <li key={i} className="flex flex-col gap-2">
-                  <div
-                    className="flex h-12 items-center"
-                    aria-hidden="true"
-                  >
+                  <div className="flex h-12 items-center" aria-hidden="true">
                     <step.illustration />
                   </div>
                   <p className="font-display text-size-0 leading-tight">
@@ -191,7 +197,9 @@ export const Explainer = ({ open, onDismiss }: Props) => {
 };
 
 /** Hook: explainer-open state with localStorage persistence. */
-export const useExplainer = (initiallyHidden = false): {
+export const useExplainer = (
+  initiallyHidden = false,
+): {
   open: boolean;
   show: () => void;
   dismiss: () => void;

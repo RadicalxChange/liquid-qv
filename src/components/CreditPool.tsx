@@ -59,8 +59,7 @@ export const CreditPool = ({ remaining, budget, height = 84 }: Props) => {
             ease: [0.22, 1, 0.36, 1],
           }}
           style={{
-            background:
-              'linear-gradient(180deg, var(--lqv-pool) 0%, var(--lqv-water) 100%)',
+            background: 'linear-gradient(180deg, var(--lqv-pool) 0%, var(--lqv-water) 100%)',
             boxShadow: 'inset 0 -2px 6px rgba(255, 255, 255, 0.18)',
           }}
         />

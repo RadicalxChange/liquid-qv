@@ -22,11 +22,7 @@
  * after the animation runs (see LiquidQV).
  */
 
-import {
-  clampVotesAgainstBudget,
-  costForVotes,
-  remainingCredits,
-} from '../math/qv';
+import { clampVotesAgainstBudget, costForVotes, remainingCredits } from '../math/qv';
 import type { VoteMap } from '../types';
 
 export interface Transfer {
@@ -53,11 +49,7 @@ export type Action =
   | { type: 'clear-transfer'; id: number }
   | { type: 'set-budget'; budget: number };
 
-export const initialState = (
-  budget: number,
-  itemIds: string[],
-  initial: VoteMap = {},
-): State => {
+export const initialState = (budget: number, itemIds: string[], initial: VoteMap = {}): State => {
   const votes: VoteMap = {};
   for (const id of itemIds) votes[id] = initial[id] ?? 0;
   return { budget, votes, transfer: null, seq: 0 };
@@ -126,12 +118,7 @@ export const reducer = (state: State, action: Action): State => {
       const budget = Math.max(0, action.budget);
       const next: VoteMap = {};
       for (const id of Object.keys(state.votes)) {
-        next[id] = clampVotesAgainstBudget(
-          state.votes[id] ?? 0,
-          id,
-          state.votes,
-          budget,
-        );
+        next[id] = clampVotesAgainstBudget(state.votes[id] ?? 0, id, state.votes, budget);
       }
       return { ...state, budget, votes: next };
     }
@@ -139,5 +126,4 @@ export const reducer = (state: State, action: Action): State => {
 };
 
 /** Convenience: derived view of the current pool. */
-export const poolFromState = (state: State): number =>
-  remainingCredits(state.budget, state.votes);
+export const poolFromState = (state: State): number => remainingCredits(state.budget, state.votes);

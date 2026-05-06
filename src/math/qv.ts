@@ -53,10 +53,7 @@ export const totalCreditsSpent = (votes: Record<string, number>): number => {
 };
 
 /** Pool invariant: pool = budget − Σ votes². Floored at 0. */
-export const remainingCredits = (
-  budget: number,
-  votes: Record<string, number>,
-): number => {
+export const remainingCredits = (budget: number, votes: Record<string, number>): number => {
   return Math.max(0, budget - totalCreditsSpent(votes));
 };
 

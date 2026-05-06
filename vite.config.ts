@@ -61,7 +61,7 @@ export default defineConfig(({ mode }) => {
         sourcemap: true,
         copyPublicDir: false,
         lib: {
-          entry: resolve(__dirname, 'src/wc/index.ts'),
+          entry: resolve(__dirname, 'src/wc/index.tsx'),
           name: 'LiquidQVElement',
           fileName: () => 'liquid-qv.wc.js',
           formats: ['iife'],

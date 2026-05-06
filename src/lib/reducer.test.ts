@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { initialState, poolFromState, reducer, type State } from './reducer';
 
-const setup = (budget = 100, ids = ['a', 'b', 'c']): State =>
-  initialState(budget, ids);
+const setup = (budget = 100, ids = ['a', 'b', 'c']): State => initialState(budget, ids);
 
 describe('reducer — set', () => {
   it('updates votes and emits a pool-to-funnel transfer', () => {

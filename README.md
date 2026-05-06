@@ -69,9 +69,12 @@ const items = [
 <liquid-qv
   credit-budget="100"
   ballot-items='[{"id":"a","title":"Option A"},{"id":"b","title":"Option B"}]'
-  embedded
 ></liquid-qv>
 ```
+
+The Web Component bundle is fully self-contained — React and CSS are inlined. The host page does not need React.
+
+A working example is at [`examples/wc.html`](examples/wc.html).
 
 ## Configuration
 
@@ -126,6 +129,8 @@ The disclaimer in the page footer (and the in-tool footer for the deployed app) 
 ## Compliance
 
 Liquid QV is a mechanism-design demonstration. The default ballot is illustrative — RadicalxChange Foundation is a 501(c)(3) nonprofit and does not support or oppose any candidate for public office. See the in-app footer for the full disclaimer.
+
+**If you embed Liquid QV** (as a React component or Web Component) on a page that uses the default 2028 candidate ballot, you must also surface the disclaimer text yourself in your embedding context — the deployed standalone app puts it in the page footer; library and Web Component embeds do not include the page chrome. The exact wording is in [`src/components/PageChrome.tsx`](src/components/PageChrome.tsx) and must remain in legible body text, not collapsed behind a click. If you supply a custom `ballotItems` prop and remove the candidate list, the disclaimer requirement falls away.
 
 ## License
 

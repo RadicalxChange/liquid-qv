@@ -90,7 +90,8 @@ export const Funnel = ({
 
   // Water polygon for the current level.
   const h = Math.max(0, Math.min(votes, maxVotes)) * SCALE;
-  const waterPath = h > 0 ? `M ${cx} ${apexY} L ${cx - h} ${apexY - h} L ${cx + h} ${apexY - h} Z` : '';
+  const waterPath =
+    h > 0 ? `M ${cx} ${apexY} L ${cx - h} ${apexY - h} L ${cx + h} ${apexY - h} Z` : '';
 
   // Container outline (the funnel itself, drawn at maxVotes).
   // Path is left-rim → apex → right-rim — two diagonals meeting at the
