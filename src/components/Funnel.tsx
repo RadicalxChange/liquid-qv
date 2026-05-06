@@ -1,11 +1,5 @@
 import { motion, useReducedMotion } from 'framer-motion';
-import {
-  type CSSProperties,
-  type KeyboardEvent,
-  useEffect,
-  useId,
-  useRef,
-} from 'react';
+import { type CSSProperties, type KeyboardEvent, useEffect, useId, useRef } from 'react';
 
 /*
  * Funnel — a 90° inverted right-triangle whose water level *is* the vote
@@ -14,26 +8,27 @@ import {
  *     votes  = h            (water height in funnel-units)
  *     credits = h²          (water area: ½ · 2h · h)
  *
- * Round 5 (hold-to-pour): the funnel is purely a visual. Interaction
- * lives on the +/− PourControls and the keyboard slider role here. The
- * older drag-the-water-surface gesture was removed — it conflicted with
- * the volumetric pour model (one canonical way to pour beats two).
+ * Round 6 (continuous votes): the funnel is purely visual + a keyboard
+ * hold target. The drag-the-water-surface gesture is gone (it
+ * conflicted with volumetric pour), and the arrow-key tap shortcuts
+ * are gone (they were a +1 / +5 convenience that breaks the "every
+ * interaction obeys the rule" stance). Only Space and Enter remain —
+ * held down they pour at the standard rate, released they stop. Every
+ * outcome is duration × rate.
  *
- * `votes` may be fractional during an active hold (the parent passes
- * the live continuous value); the water polygon and surface line render
- * directly from it for smoothness. ARIA reports the integer-rounded
- * value so screen readers get a stable announcement at rest.
+ * `votes` may be fractional (real-valued) at any time. The water
+ * polygon and surface line render directly from it. ARIA reports the
+ * one-decimal-rounded value to match the visible readout — screen
+ * reader users hear the same number a sighted user reads.
  */
 
 interface FunnelProps {
-  /** Display vote level — integer at rest, fractional during a hold. */
+  /** Real-valued vote level (rest or live). */
   votes: number;
-  /** Maximum allowed votes here (= floor(√budget)). */
+  /** Maximum allowed votes here (= √budget). */
   maxVotes: number;
   /** Visible label for screen readers and the slider's aria-valuetext. */
   label: string;
-  /** Tap-step a single vote (used by arrow keys). */
-  onTapStep: (delta: number) => void;
   /** Begin a continuous pour (Space/Enter held). */
   onPourStart: (direction: 'in' | 'out') => void;
   /** End a continuous pour (Space/Enter released). */
@@ -50,11 +45,13 @@ interface FunnelProps {
   style?: CSSProperties;
 }
 
+/** One-decimal rounding used both visually and for ARIA values. */
+const round1 = (n: number): number => Math.round(n * 10) / 10;
+
 export const Funnel = ({
   votes,
   maxVotes,
   label,
-  onTapStep,
   onPourStart,
   onPourEnd,
   instantUpdate = false,
@@ -64,9 +61,9 @@ export const Funnel = ({
   const reduceMotion = useReducedMotion();
   const sliderId = useId();
 
-  // Track which key (if any) is currently driving a hold-pour. Only one
-  // hold at a time per funnel — pressing a second key while holding the
-  // first is ignored. Release of the original key ends the pour.
+  // Track which key is currently driving a hold-pour. Only one hold at a
+  // time per funnel — pressing a second key while holding the first is
+  // ignored. Release of the original key ends the pour.
   const holdKeyRef = useRef<string | null>(null);
 
   // SVG layout — width-driven. Funnel height = funnel width / 2 (45° walls).
@@ -94,9 +91,9 @@ export const Funnel = ({
   // Keyboard:
   //   Space / Enter held → continuous pour-in (release ends pour)
   //   Shift + Space/Enter held → continuous pour-out (drain)
-  //   Arrow keys → tap ±1
-  //   PageUp/Dn → tap ±5
-  //   Home / End → tap to 0 / cap (discrete events; we step in the parent)
+  //
+  // Arrow keys, Page Up/Dn, Home/End — all gone. There are no tap
+  // shortcuts. Every input goes through the same physics.
   const handleKeyDown = (e: KeyboardEvent<SVGSVGElement>) => {
     if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter') {
       // Don't restart the pour on OS-level repeat events.
@@ -104,36 +101,7 @@ export const Funnel = ({
       e.preventDefault();
       holdKeyRef.current = e.key;
       onPourStart(e.shiftKey ? 'out' : 'in');
-      return;
     }
-    let delta = 0;
-    switch (e.key) {
-      case 'ArrowUp':
-      case 'ArrowRight':
-        delta = e.shiftKey ? 5 : 1;
-        break;
-      case 'ArrowDown':
-      case 'ArrowLeft':
-        delta = e.shiftKey ? -5 : -1;
-        break;
-      case 'PageUp':
-        delta = 5;
-        break;
-      case 'PageDown':
-        delta = -5;
-        break;
-      case 'Home':
-        // Treat as a multi-step decrement to zero.
-        delta = -maxVotes;
-        break;
-      case 'End':
-        delta = maxVotes;
-        break;
-      default:
-        return;
-    }
-    e.preventDefault();
-    onTapStep(delta);
   };
 
   const handleKeyUp = (e: KeyboardEvent<SVGSVGElement>) => {
@@ -143,8 +111,7 @@ export const Funnel = ({
     }
   };
 
-  // Defensive: if focus is lost mid-hold, end the pour so we don't
-  // leak the active state.
+  // Defensive: if focus is lost mid-hold, end the pour.
   useEffect(() => {
     const cancel = () => {
       if (!holdKeyRef.current) return;
@@ -155,8 +122,8 @@ export const Funnel = ({
     return () => window.removeEventListener('blur', cancel);
   }, [onPourEnd]);
 
-  const announcedVotes = Math.round(votes);
-  const announcedCredits = announcedVotes * announcedVotes;
+  const announcedVotes = round1(votes);
+  const announcedCredits = round1(votes * votes);
   return (
     <svg
       viewBox={`0 0 ${size} ${viewBoxH}`}
@@ -164,9 +131,9 @@ export const Funnel = ({
       role="slider"
       aria-label={label}
       aria-valuemin={0}
-      aria-valuemax={maxVotes}
+      aria-valuemax={round1(maxVotes)}
       aria-valuenow={announcedVotes}
-      aria-valuetext={`${announcedVotes} ${announcedVotes === 1 ? 'vote' : 'votes'}, ${announcedCredits} ${announcedCredits === 1 ? 'credit' : 'credits'}`}
+      aria-valuetext={`${announcedVotes.toFixed(1)} votes, ${announcedCredits.toFixed(1)} credits`}
       aria-orientation="vertical"
       tabIndex={0}
       onKeyDown={handleKeyDown}
@@ -191,7 +158,7 @@ export const Funnel = ({
           live hold (instantUpdate), we bypass motion's interpolation so
           the water tracks the rAF-driven `votes` prop frame-for-frame
           instead of lagging behind a moving target. At rest, the
-          motion transition gives ± changes a soft "settle" feel. */}
+          motion transition gives released-pour changes a soft settle. */}
       {instantUpdate || reduceMotion ? (
         <path d={waterPath} fill="var(--lqv-water)" style={{ pointerEvents: 'none' }} />
       ) : (
@@ -228,12 +195,7 @@ export const Funnel = ({
             stroke="var(--lqv-water-dark)"
             strokeWidth={1.25}
             strokeOpacity={0.7}
-            animate={{
-              x1: cx - h,
-              x2: cx + h,
-              y1: apexY - h,
-              y2: apexY - h,
-            }}
+            animate={{ x1: cx - h, x2: cx + h, y1: apexY - h, y2: apexY - h }}
             transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             style={{ pointerEvents: 'none' }}
           />
@@ -249,8 +211,7 @@ export const Funnel = ({
         strokeLinejoin="round"
       />
 
-      {/* Rim — short horizontal at the cap. Water hitting this line
-          communicates "this funnel is full" without a separate label. */}
+      {/* Rim — short horizontal at the cap. */}
       <line
         x1={cx - fullH}
         x2={cx + fullH}

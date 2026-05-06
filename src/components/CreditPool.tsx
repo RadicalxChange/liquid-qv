@@ -18,13 +18,14 @@ import { motion, useReducedMotion } from 'framer-motion';
  */
 
 interface Props {
-  /** Continuous remaining credits (may be fractional during a hold). */
+  /** Real-valued remaining credits. */
   remaining: number;
   budget: number;
   /**
-   * Pre-formatted numeric readout. Round 5 lets the parent pass an
-   * integer string at rest and a one-decimal string during a hold —
-   * the only place decimals are visible in the tool, by design.
+   * Pre-formatted numeric readout — always one decimal in round 6
+   * ("100.0", "94.3", "0.0"). The parent owns the formatting so that
+   * the displayed text always matches the conservation math computed
+   * upstream.
    */
   readout?: string;
   /** Optional pixel height of the pool. Defaults to a fluid-ish value. */
@@ -34,9 +35,10 @@ interface Props {
 export const CreditPool = ({ remaining, budget, readout, height = 84 }: Props) => {
   const reduceMotion = useReducedMotion();
   const fillRatio = budget > 0 ? Math.max(0, Math.min(1, remaining / budget)) : 0;
-  // ARIA value stays integer — screen readers don't want intra-hold noise.
-  const remainingInt = Math.round(remaining);
-  const display = readout ?? remainingInt.toString();
+  const display = readout ?? (Math.round(remaining * 10) / 10).toFixed(1);
+  // ARIA mirrors the displayed one-decimal readout — what a sighted
+  // user reads is what a screen-reader user hears.
+  const remainingDisplay = Math.round(remaining * 10) / 10;
 
   return (
     <div
@@ -45,8 +47,8 @@ export const CreditPool = ({ remaining, budget, readout, height = 84 }: Props) =
       aria-label="Credits remaining in the pool"
       aria-valuemin={0}
       aria-valuemax={budget}
-      aria-valuenow={remainingInt}
-      aria-valuetext={`${remainingInt} of ${budget} credits remaining`}
+      aria-valuenow={remainingDisplay}
+      aria-valuetext={`${display} of ${budget} credits remaining`}
     >
       <div
         className="relative w-full overflow-hidden rounded-[14px]"

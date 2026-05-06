@@ -2,27 +2,24 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 
 /*
  * PourStream — the visible water flow between pool and funnel during a
- * hold-to-pour gesture (and during the brief 250 ms tap animation).
+ * hold-to-pour gesture.
  *
- * Round 5 replaces the old discrete "transfer indicator" (one streak per
- * vote-cost delta) with a continuous stream whose width is *constant*,
- * matching the constant volumetric rate of the pour. Rate isn't read off
- * the stream's thickness — it's read off the pool emptying. The stream's
- * job is simply to make the connection between the two visible.
+ * Round 6 drops the dedicated tap animation: every interaction is a
+ * hold (a press is just a short hold), so the same `active` mode covers
+ * everything between pointer-down and pointer-up. On release we shift
+ * into `fading` mode for a brief opacity decay, then unmount.
  *
- * Three render states:
- *   - active   → fully visible with a slight downward shimmer (or upward
- *                when draining); stays visible until the pour ends.
- *   - fading   → opacity fades over ~150 ms post-release.
- *   - tapAnim  → brief 250 ms appearance for a single tap (+1 / −1).
+ * Width is *constant*, matching the constant volumetric rate of the
+ * pour. Rate is read off the pool emptying — not the stream's
+ * thickness. The stream's job is to make the connection visible.
  *
- * Layout: this lives inside each funnel card column, so the stream
- * spans the small strip between the card's top edge (which abuts the
- * pool) and the funnel rim. A gentle vertical bezier curve makes the
- * source-and-destination directionality obvious without needing labels.
+ * Layout: lives inside each funnel card column, spanning the strip
+ * between the card's top edge (which abuts the pool) and the funnel
+ * rim. A gentle vertical bezier curve makes the source-and-destination
+ * directionality obvious without needing labels.
  */
 
-export type StreamMode = 'active' | 'fading' | 'tapAnim';
+export type StreamMode = 'active' | 'fading';
 
 interface Props {
   /** Whether this column should currently be rendering a stream. */
@@ -53,8 +50,7 @@ export const PourStream = ({ visible, direction, mode }: Props) => {
       ${cx + 6} ${top + (bot - top) * 0.7}
       ${cx} ${bot}`;
 
-  const duration =
-    mode === 'tapAnim' ? 0.25 : mode === 'fading' ? 0.15 : reduceMotion ? 0 : 0.18;
+  const duration = mode === 'fading' ? 0.15 : reduceMotion ? 0 : 0.18;
 
   return (
     <div
