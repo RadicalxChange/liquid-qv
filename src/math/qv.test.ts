@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  availableCreditsFor,
   clampVotesAgainstBudget,
   costForVotes,
   maxVotes,
   remainingCredits,
+  remainingCreditsContinuous,
   totalCreditsSpent,
 } from './qv';
 
@@ -55,6 +57,35 @@ describe('remainingCredits', () => {
 
   it('floors at zero rather than going negative', () => {
     expect(remainingCredits(10, { a: 5 })).toBe(0);
+  });
+});
+
+describe('remainingCreditsContinuous', () => {
+  it('uses raw v*v so a fractional vote counts continuously', () => {
+    // a active in a hold at v=2.5 (so credits=6.25), b at integer 3 (=9)
+    expect(remainingCreditsContinuous(100, { a: 2.5, b: 3 })).toBeCloseTo(100 - 6.25 - 9);
+  });
+
+  it('matches integer remainingCredits when all votes are integer', () => {
+    const votes = { a: 4, b: 6 };
+    expect(remainingCreditsContinuous(100, votes)).toBe(remainingCredits(100, votes));
+  });
+
+  it('floors at zero', () => {
+    expect(remainingCreditsContinuous(10, { a: 5 })).toBe(0);
+  });
+});
+
+describe('availableCreditsFor', () => {
+  it('returns budget minus other items, never less than zero', () => {
+    expect(availableCreditsFor('a', { a: 0, b: 4 }, 100)).toBe(100 - 16);
+    expect(availableCreditsFor('a', { a: 999, b: 999 }, 5)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('ignores the item being asked about — used for live cap during a pour', () => {
+    // a at fractional 2.5 (6.25 credits committed in live state)
+    // From a's own perspective, "available" means "everything b is not using"
+    expect(availableCreditsFor('a', { a: 2.5, b: 4 }, 100)).toBe(100 - 16);
   });
 });
 
