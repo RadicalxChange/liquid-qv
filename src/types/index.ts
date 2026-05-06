@@ -8,6 +8,7 @@ export interface BallotItem {
 
 export interface ThemeOverrides {
   bg?: string;
+  card?: string;
   fg?: string;
   muted?: string;
   accent?: string;

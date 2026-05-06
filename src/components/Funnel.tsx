@@ -50,7 +50,7 @@ interface FunnelProps {
   onCommit?: (votes: number) => void;
   /** Visible label for screen readers and the drag handle aria-valuetext. */
   label: string;
-  /** Pixel-size of the drawable square area. Default 220. */
+  /** Pixel width of the funnel SVG (height auto-derives from 45° geometry). */
   size?: number;
   /** Override CSS custom properties on the wrapper. */
   style?: CSSProperties;
@@ -71,19 +71,20 @@ export const Funnel = ({
   const draggingRef = useRef(false);
   const sliderId = useId();
 
-  // SVG layout. We give the funnel a 1:1 box and a small padding for
-  // the rim and tick labels. The funnel apex sits at the bottom-centre
-  // of the drawable area; the walls reach the rim at the top corners
-  // when level == maxVotes.
-  const PAD_TOP = 14; // headroom above the rim for ticks
-  const PAD_X = 18;
+  // SVG layout — width-driven. We pick a width and let height fall out
+  // of the 45° geometry: a triangle with width 2h needs height h, so
+  // funnelHeight = funnelWidth / 2. Reserve a strip on the right for
+  // the vote-scale tick labels, and small pads on the other three
+  // sides; the SVG viewBox grows tall just enough to fit.
+  const PAD_TOP = 14;
+  const PAD_LEFT = 14;
   const PAD_BOTTOM = 18;
-  const drawHeight = size - PAD_TOP - PAD_BOTTOM;
-  const drawWidth = size - 2 * PAD_X;
-  // For 45° walls, drawHeight should equal drawWidth/2. Force it.
-  const usableHeight = Math.min(drawHeight, drawWidth / 2);
-  const cx = size / 2;
-  const apexY = PAD_TOP + usableHeight; // bottom of the funnel triangle
+  const LABEL_W = 30;
+  const funnelWidth = size - PAD_LEFT - LABEL_W;
+  const usableHeight = funnelWidth / 2; // 45° walls
+  const viewBoxH = PAD_TOP + usableHeight + PAD_BOTTOM;
+  const cx = PAD_LEFT + funnelWidth / 2;
+  const apexY = PAD_TOP + usableHeight;
   // Convert vote-units to pixels.
   const SCALE = maxVotes > 0 ? usableHeight / maxVotes : 1;
 
@@ -92,9 +93,12 @@ export const Funnel = ({
   const waterPath = h > 0 ? `M ${cx} ${apexY} L ${cx - h} ${apexY - h} L ${cx + h} ${apexY - h} Z` : '';
 
   // Container outline (the funnel itself, drawn at maxVotes).
+  // Path is left-rim → apex → right-rim — two diagonals meeting at the
+  // 90° vertex. The horizontal rim is drawn separately so we can give
+  // it a different stroke treatment (and so a missing-wall bug like
+  // the one fixed in this commit can't recur).
   const fullH = usableHeight;
-  const outlinePath = `M ${cx} ${apexY} L ${cx - fullH} ${apexY - fullH} L ${cx + fullH} ${apexY - fullH}`;
-  // Optional rim flourish — short horizontal at the top suggesting capacity.
+  const outlinePath = `M ${cx - fullH} ${apexY - fullH} L ${cx} ${apexY} L ${cx + fullH} ${apexY - fullH}`;
   const rimY = apexY - fullH;
 
   // Convert a pointer Y position to a vote level. Above the rim → maxVotes.
@@ -103,10 +107,9 @@ export const Funnel = ({
     (clientY: number): number => {
       const rect = svgRef.current?.getBoundingClientRect();
       if (!rect) return votes;
-      // Position within the SVG viewBox (in px relative to the rendered size).
-      // The viewBox is `size`, and the SVG renders at width `rect.width`.
-      const localY = ((clientY - rect.top) / rect.height) * size;
-      // Distance from apex upward.
+      // Map pointer y onto SVG-local y. The viewBox height is `viewBoxH`;
+      // the rendered height is `rect.height`.
+      const localY = ((clientY - rect.top) / rect.height) * viewBoxH;
       const upward = apexY - localY;
       const proposed = upward / SCALE;
       // Clamp to [0, min(maxVotes, votes + available)] — caller is the
@@ -114,7 +117,7 @@ export const Funnel = ({
       const ceiling = Math.min(maxVotes, votes + Math.max(0, available));
       return Math.max(0, Math.min(proposed, ceiling));
     },
-    [votes, maxVotes, available, apexY, SCALE, size],
+    [votes, maxVotes, available, apexY, SCALE, viewBoxH],
   );
 
   const handlePointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
@@ -197,7 +200,7 @@ export const Funnel = ({
   return (
     <svg
       ref={svgRef}
-      viewBox={`0 0 ${size} ${size}`}
+      viewBox={`0 0 ${size} ${viewBoxH}`}
       width="100%"
       role="slider"
       aria-label={label}
@@ -223,10 +226,10 @@ export const Funnel = ({
     >
       {/* Background card — soft surface inside the funnel cavity. */}
       <rect
-        x={PAD_X - 6}
+        x={PAD_LEFT - 6}
         y={PAD_TOP - 6}
-        width={drawWidth + 12}
-        height={drawHeight + 12}
+        width={funnelWidth + 12}
+        height={usableHeight + 12}
         rx={10}
         fill="var(--lqv-funnel-bg)"
         stroke="var(--lqv-funnel-wall)"

@@ -77,13 +77,15 @@ export const CreditPool = ({ remaining, budget, height = 84 }: Props) => {
           ))}
         </div>
 
-        {/* Numeric label, layered above the water. */}
-        <div className="relative flex h-full items-center justify-between px-4 md:px-6">
-          <span className="font-display text-size-2 text-white drop-shadow-[0_1px_0_rgba(0,0,0,0.25)]">
+        {/* Numeric label, layered above the water. Stacks tight on narrow
+            viewports where the wide reservoir squeezes horizontal room. */}
+        <div className="relative flex h-full items-center justify-between gap-3 px-4 md:px-6">
+          <span className="font-display text-size-1 md:text-size-2 leading-none text-white drop-shadow-[0_1px_0_rgba(0,0,0,0.25)] tabular-nums">
             {(Math.round(remaining * 100) / 100).toFixed(2)}
           </span>
-          <span className="text-size--2 font-body text-white/85 tracking-wide uppercase">
-            of {budget} credits remaining
+          <span className="text-size--3 md:text-size--2 font-body text-white/85 tracking-wide uppercase text-right leading-tight">
+            of {budget}
+            <br className="md:hidden" /> credits remaining
           </span>
         </div>
       </div>

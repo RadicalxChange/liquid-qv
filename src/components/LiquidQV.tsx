@@ -35,6 +35,7 @@ const themeToCssVars = (theme: ThemeOverrides | undefined): Record<string, strin
   if (!theme) return {};
   const out: Record<string, string> = {};
   if (theme.bg) out['--lqv-bg'] = theme.bg;
+  if (theme.card) out['--lqv-card'] = theme.card;
   if (theme.fg) out['--lqv-fg'] = theme.fg;
   if (theme.muted) out['--lqv-muted'] = theme.muted;
   if (theme.accent) out['--lqv-accent'] = theme.accent;
@@ -126,18 +127,18 @@ export const LiquidQV = ({
       style={cssVars as React.CSSProperties}
       aria-label="Liquid QV ballot"
     >
-      {(heading || prompt || prompt !== '') && (
-        <header className="mb-4 md:mb-6">
-          {heading && (
-            <h2 className="font-display text-size-3 md:text-size-4 leading-none mb-2">
-              {heading}
-            </h2>
-          )}
-          <p className="font-body text-size-0 text-light-black/80 max-w-[60ch]">
+      <header className="mb-4 md:mb-6">
+        {heading && (
+          <h2 className="font-display text-size-3 md:text-size-4 leading-none mb-2">
+            {heading}
+          </h2>
+        )}
+        {(prompt ?? BALLOT_PROMPT) && (
+          <p className="font-body text-size-0 max-w-[60ch]" style={{ color: 'var(--lqv-fg)' }}>
             {prompt ?? BALLOT_PROMPT}
           </p>
-        </header>
-      )}
+        )}
+      </header>
 
       <CreditPool remaining={remaining} budget={state.budget} />
 
@@ -156,7 +157,7 @@ export const LiquidQV = ({
               className="flex flex-col rounded-[14px] border p-3 md:p-4"
               style={{
                 borderColor: 'var(--lqv-funnel-wall)',
-                background: 'color-mix(in srgb, var(--lqv-bg) 80%, white 20%)',
+                background: 'var(--lqv-card)',
               }}
             >
               <div className="mb-2 flex items-baseline justify-between gap-2">
@@ -164,13 +165,13 @@ export const LiquidQV = ({
                   <h3 className="font-display text-size-1 leading-none truncate">
                     {item.title}
                     {item.tag ? (
-                      <span className="ml-2 align-middle text-size--2 font-body text-gray">
+                      <span className="ml-2 align-middle text-size--2 font-body text-[var(--lqv-muted)]">
                         ({item.tag})
                       </span>
                     ) : null}
                   </h3>
                   {item.description ? (
-                    <p className="text-size--2 text-gray mt-1 line-clamp-2">
+                    <p className="text-size--2 text-[var(--lqv-muted)] mt-1 line-clamp-2">
                       {item.description}
                     </p>
                   ) : null}
@@ -179,7 +180,7 @@ export const LiquidQV = ({
                   type="button"
                   onClick={() => resetItem(item.id)}
                   disabled={v === 0}
-                  className="text-size--3 underline text-water-700 hover:text-water-900 disabled:opacity-40 disabled:no-underline"
+                  className="text-size--3 underline text-[var(--lqv-water)] hover:text-[var(--lqv-water-dark)] disabled:opacity-40 disabled:no-underline"
                   aria-label={`Reset votes on ${item.title}`}
                 >
                   reset
@@ -201,25 +202,34 @@ export const LiquidQV = ({
                 label={`Votes for ${item.title}`}
               />
 
-              <dl className="mt-2 flex items-center justify-between text-size--2 font-body">
+              <dl className="mt-2 flex items-baseline justify-between gap-2 text-size--2 font-body">
                 <div>
                   <dt className="sr-only">Votes</dt>
                   <dd className="tabular-nums">
-                    <span className="text-gray mr-1">votes</span>
+                    <span className="text-[var(--lqv-muted)] mr-1">votes</span>
                     <span className="font-medium">{roundVotes(v).toFixed(2)}</span>
                   </dd>
                 </div>
                 <div>
                   <dt className="sr-only">Credits spent</dt>
-                  <dd className="tabular-nums text-gray">
+                  <dd className="tabular-nums text-[var(--lqv-muted)]">
                     {credits.toFixed(2)} credits
                   </dd>
                 </div>
               </dl>
+              {/* Marginal-cost cue. (v+1)² − v² = 2v + 1 — the next whole
+                  vote costs more than the previous one. Surfacing the
+                  number drives the lesson home for users who haven't
+                  internalised the slope yet. */}
+              {v < cap && (
+                <p className="mt-1 text-size--3 text-[var(--lqv-muted)]">
+                  Next +1 vote = <span className="tabular-nums">{(2 * v + 1).toFixed(2)}</span> credits
+                </p>
+              )}
 
               {/* Numeric input fallback. Submitting recalculates the
                   allocation through the same reducer path. */}
-              <label className="mt-2 flex items-center gap-2 text-size--3 text-gray">
+              <label className="mt-2 flex items-center gap-2 text-size--3 text-[var(--lqv-muted)]">
                 <span>Set votes</span>
                 <input
                   type="number"
@@ -242,13 +252,13 @@ export const LiquidQV = ({
       </div>
 
       <div className="mt-6 flex items-center justify-between">
-        <p className="text-size--2 text-gray">
+        <p className="text-size--2 text-[var(--lqv-muted)]">
           Cap per funnel: {cap} votes (= {state.budget} credits if alone).
         </p>
         <button
           type="button"
           onClick={resetAll}
-          className="font-body text-size--2 underline text-water-700 hover:text-water-900"
+          className="font-body text-size--2 underline text-[var(--lqv-water)] hover:text-[var(--lqv-water-dark)]"
         >
           Reset all
         </button>

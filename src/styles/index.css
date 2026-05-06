@@ -17,8 +17,9 @@
  */
 :root {
   --lqv-bg: #fafaf7;
+  --lqv-card: #ffffff;
   --lqv-fg: #010101;
-  --lqv-muted: #6c6c6c;
+  --lqv-muted: #5b5b5b;
   --lqv-accent: #edff38;
   --lqv-water: #1773b5;
   --lqv-water-dark: #0a3252;
@@ -31,14 +32,15 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --lqv-bg: #0a1018;
+    --lqv-card: #161d27;
     --lqv-fg: #f2f1ea;
-    --lqv-muted: #9c9888;
+    --lqv-muted: #b6b3a4;
     --lqv-accent: #edff38;
     --lqv-water: #5fb1de;
     --lqv-water-dark: #9dceeb;
     --lqv-pool: #2e8fcc;
     --lqv-funnel-wall: #2a3340;
-    --lqv-funnel-bg: #131a23;
+    --lqv-funnel-bg: #0e141c;
     --lqv-shadow: rgba(0, 0, 0, 0.5);
   }
 }
