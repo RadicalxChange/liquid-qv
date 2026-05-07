@@ -8,32 +8,28 @@ import { type CSSProperties, type KeyboardEvent, useEffect, useId, useRef } from
  *     votes  = h            (water height in funnel-units)
  *     credits = h²          (water area: ½ · 2h · h)
  *
- * Round 6 (continuous votes): the funnel is purely visual + a keyboard
- * hold target. Only Space and Enter remain — held they pour at the
- * standard rate, released they stop. Every outcome is duration × rate.
+ * Round 11 (measuring stick + integer snap on release): the form is the
+ * round-7 2D triangle (the gauge from #8 — live arrow + two reference
+ * ticks — is replaced here). On the outer right edge we render a
+ * persistent 0–10 ruler with major ticks at 0/2/4/6/8/10 and minor
+ * ticks at 1/3/5/7/9. Always visible, no fade behaviour. The ruler is
+ * a calm reference, not a control.
  *
- * Round 10 (measuring stick): a calm gauge layer along the *outside*
- * right edge:
- *   - A live indicator (small left-pointing arrow + numeric vote
- *     count, 1 decimal) tracks the water surface whenever votes > 0.
- *     Position updates frame-for-frame during a hold (`instantUpdate`),
- *     and gets the same Framer-Motion settle as the water otherwise.
- *   - Two faint reference ticks at votes = 5 and votes = 10 (half-cap
- *     and cap) frame the range when the funnel is empty *and* nothing
- *     in the grid is being held. The moment any pour starts, ticks
- *     across every funnel cross-fade to zero so the indicator has the
- *     stage; on release they cross-fade back in. No ruler, no grid,
- *     no per-integer markings — the two anchor ticks are the whole
- *     scale.
+ * The vote axis is *linear in height* (votes = water height) so the
+ * tick spacing is even. The quadratic lives in the credits readout
+ * under the funnel; the ruler counts votes directly.
  *
- * `votes` may be fractional (real-valued) at any time. ARIA reports
- * the one-decimal-rounded value — same number a sighted user reads.
+ * `votes` is an integer at rest and may be fractional during an active
+ * hold (the parent passes the live continuous value). The water polygon
+ * and surface highlight render directly from it. ARIA reports the
+ * integer-rounded value — the same number the under-funnel readout
+ * shows.
  */
 
 interface FunnelProps {
-  /** Real-valued vote level (rest or live). */
+  /** Vote level — integer at rest, fractional during a live hold. */
   votes: number;
-  /** Maximum allowed votes here (= √budget). */
+  /** Maximum allowed votes here (= ⌊√budget⌋, integer cap). */
   maxVotes: number;
   /** Visible label for screen readers and the slider's aria-valuetext. */
   label: string;
@@ -43,35 +39,27 @@ interface FunnelProps {
   onPourEnd: () => void;
   /**
    * Disable the water polygon's interpolation animation. Set during an
-   * active hold so the water tracks the live value frame-for-frame
-   * instead of lagging behind a moving Framer-Motion target.
+   * active hold so the water tracks the live `votes` prop frame-for-
+   * frame; off otherwise so the snap-on-release transition gets a soft
+   * settle.
    */
   instantUpdate?: boolean;
-  /**
-   * True when *any* funnel in the grid is currently being held (the
-   * parent flips this on the first pointerdown / keydown and off on
-   * release). Drives the cross-fade of the reference ticks across the
-   * grid — they hide during a pour so the live indicator owns the
-   * stage, and fade back in on release.
-   */
-  isAnyPouring?: boolean;
   /** Pixel width of the funnel SVG. Height auto-derives from 45° geometry. */
   size?: number;
   /** Override CSS custom properties on the wrapper. */
   style?: CSSProperties;
 }
 
-/** One-decimal rounding used both visually and for ARIA values. */
-const round1 = (n: number): number => Math.round(n * 10) / 10;
-
-// Gauge layer constants. Tuned visually against a 220-wide funnel.
-const GAUGE_W = 36; // horizontal room reserved past the V's right edge
-const ARROW_OFFSET = 4; // gap from the V's right edge to the arrow tip
-const ARROW_SIZE = 7; // arrow side length (the left-pointing triangle)
-const TICK_LENGTH = 8; // reference tick mark length (horizontal)
-const TICK_OFFSET = 4; // gap from the V's right edge to the tick start
-const FADE_MS = 250;
-const POSITION_MS = 180;
+// Ruler layout constants. The funnel cavity stays at its pre-#8
+// proportions (size − pads, no GAUGE_W subtraction); the ruler lives
+// in extra viewBox width past the V's right edge.
+const RULER_GAP = 4; // gap from V's right edge to the ruler's tick anchor
+const MAJOR_TICK_W = 10;
+const MINOR_TICK_W = 5;
+const LABEL_OFFSET = 4;
+const LABEL_FONT_SIZE = 10;
+const LABEL_RESERVE = 14; // approx pixel room for "10" / "0" labels
+const RULER_RIGHT_PAD = 4;
 const POSITION_EASE = [0.22, 1, 0.36, 1] as const;
 
 export const Funnel = ({
@@ -81,27 +69,22 @@ export const Funnel = ({
   onPourStart,
   onPourEnd,
   instantUpdate = false,
-  isAnyPouring = false,
   size = 220,
   style,
 }: FunnelProps) => {
   const reduceMotion = useReducedMotion();
   const sliderId = useId();
 
-  // Track which key is currently driving a hold-pour. Only one hold at a
-  // time per funnel — pressing a second key while holding the first is
-  // ignored. Release of the original key ends the pour.
   const holdKeyRef = useRef<string | null>(null);
 
-  // SVG layout — width-driven. Funnel cavity = (size − pads − gauge);
-  // V height = funnel cavity / 2 (45° walls).
+  // SVG layout — width-driven. Funnel cavity = size − pads (no gauge
+  // subtraction); V height = funnel cavity / 2 (45° walls).
   const PAD_TOP = 14;
   const PAD_LEFT = 14;
   const PAD_RIGHT = 14;
   const PAD_BOTTOM = 18;
-  const funnelWidth = size - PAD_LEFT - PAD_RIGHT - GAUGE_W;
+  const funnelWidth = size - PAD_LEFT - PAD_RIGHT;
   const usableHeight = funnelWidth / 2;
-  const viewBoxH = PAD_TOP + usableHeight + PAD_BOTTOM;
   const cx = PAD_LEFT + funnelWidth / 2;
   const apexY = PAD_TOP + usableHeight;
   const SCALE = maxVotes > 0 ? usableHeight / maxVotes : 1;
@@ -116,44 +99,41 @@ export const Funnel = ({
   const outlinePath = `M ${cx - fullH} ${apexY - fullH} L ${cx} ${apexY} L ${cx + fullH} ${apexY - fullH}`;
   const rimY = apexY - fullH;
 
-  // Gauge geometry — anchored just past the V's right edge.
+  // Ruler geometry. Tick "axis" is at rulerAxisX; ticks point LEFT
+  // (toward the water) so a major tick spans [rulerAxisX − MAJOR_TICK_W,
+  // rulerAxisX]. Labels sit just to the right of the axis.
   const rightEdgeX = cx + fullH;
-  const indicatorX = rightEdgeX + ARROW_OFFSET;
-  const tickX1 = rightEdgeX + TICK_OFFSET;
-  const tickX2 = tickX1 + TICK_LENGTH;
-  // Reference ticks: half-cap (votes 5) and cap (votes 10 / rim).
-  const tickHalfY = apexY - 5 * SCALE;
-  const tickFullY = rimY;
-  const indicatorY = apexY - h;
+  const rulerAxisX = rightEdgeX + RULER_GAP + MAJOR_TICK_W;
+  const labelX = rulerAxisX + LABEL_OFFSET;
+  const viewBoxW = labelX + LABEL_RESERVE + RULER_RIGHT_PAD;
+  const viewBoxH = PAD_TOP + usableHeight + PAD_BOTTOM;
 
-  const announcedVotes = round1(votes);
-  const showIndicator = announcedVotes > 0;
-  const showTicks = announcedVotes <= 0 && !isAnyPouring;
+  // The y-position of vote level v on the ruler is the same as the
+  // water-surface y at that vote level — apexY − v × SCALE — so the
+  // ruler reads directly off the water.
+  const tickY = (voteLevel: number) => apexY - voteLevel * SCALE;
+
+  // 0/2/4/6/8/10 — major. 1/3/5/7/9 — minor.
+  const MAJOR_VALUES = [0, 2, 4, 6, 8, 10];
+  const MINOR_VALUES = [1, 3, 5, 7, 9];
 
   // Keyboard:
   //   Space / Enter held → continuous pour-in (release ends pour)
   //   Shift + Space/Enter held → continuous pour-out (drain)
-  //
-  // Arrow keys, Page Up/Dn, Home/End — all gone. There are no tap
-  // shortcuts. Every input goes through the same physics.
   const handleKeyDown = (e: KeyboardEvent<SVGSVGElement>) => {
     if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter') {
-      // Don't restart the pour on OS-level repeat events.
       if (e.repeat || holdKeyRef.current) return;
       e.preventDefault();
       holdKeyRef.current = e.key;
       onPourStart(e.shiftKey ? 'out' : 'in');
     }
   };
-
   const handleKeyUp = (e: KeyboardEvent<SVGSVGElement>) => {
     if (holdKeyRef.current && e.key === holdKeyRef.current) {
       holdKeyRef.current = null;
       onPourEnd();
     }
   };
-
-  // Defensive: if focus is lost mid-hold, end the pour.
   useEffect(() => {
     const cancel = () => {
       if (!holdKeyRef.current) return;
@@ -164,17 +144,18 @@ export const Funnel = ({
     return () => window.removeEventListener('blur', cancel);
   }, [onPourEnd]);
 
-  const announcedCredits = round1(votes * votes);
+  const announcedVotes = Math.round(votes);
+  const announcedCredits = announcedVotes * announcedVotes;
   return (
     <svg
-      viewBox={`0 0 ${size} ${viewBoxH}`}
+      viewBox={`0 0 ${viewBoxW} ${viewBoxH}`}
       width="100%"
       role="slider"
       aria-label={label}
       aria-valuemin={0}
-      aria-valuemax={round1(maxVotes)}
+      aria-valuemax={maxVotes}
       aria-valuenow={announcedVotes}
-      aria-valuetext={`${announcedVotes.toFixed(1)} votes, ${announcedCredits.toFixed(1)} credits`}
+      aria-valuetext={`${announcedVotes} ${announcedVotes === 1 ? 'vote' : 'votes'}, ${announcedCredits} ${announcedCredits === 1 ? 'credit' : 'credits'}`}
       aria-orientation="vertical"
       tabIndex={0}
       onKeyDown={handleKeyDown}
@@ -197,9 +178,10 @@ export const Funnel = ({
 
       {/* Water — the polygon area equals credits = votes². During a
           live hold (instantUpdate), we bypass motion's interpolation so
-          the water tracks the rAF-driven `votes` prop frame-for-frame
-          instead of lagging behind a moving target. At rest, the
-          motion transition gives released-pour changes a soft settle. */}
+          the water tracks the rAF-driven `votes` prop frame-for-frame.
+          Outside a hold, the motion transition gives the snap-on-
+          release a soft settle (~150 ms is roughly Framer's default
+          ease for `d` animations at this duration). */}
       {instantUpdate || reduceMotion ? (
         <path d={waterPath} fill="var(--lqv-water)" style={{ pointerEvents: 'none' }} />
       ) : (
@@ -208,7 +190,7 @@ export const Funnel = ({
           initial={false}
           fill="var(--lqv-water)"
           animate={{ d: waterPath }}
-          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.15, ease: POSITION_EASE }}
           style={{ pointerEvents: 'none' }}
         />
       )}
@@ -237,7 +219,7 @@ export const Funnel = ({
             strokeWidth={1.25}
             strokeOpacity={0.7}
             animate={{ x1: cx - h, x2: cx + h, y1: apexY - h, y2: apexY - h }}
-            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.15, ease: POSITION_EASE }}
             style={{ pointerEvents: 'none' }}
           />
         ))}
@@ -263,91 +245,51 @@ export const Funnel = ({
         strokeLinecap="round"
       />
 
-      {/* Reference ticks — half-cap and full-cap. The cross-fade
-          between ticks ⇆ indicator runs through plain CSS opacity
-          transitions instead of Framer Motion: the SVG-attribute path
-          framer takes for opacity on <g> didn't reliably re-render
-          after `animate` prop changes here, and a CSS transition
-          on `style.opacity` handles it cleanly. */}
-      <g
-        aria-hidden
-        style={{
-          opacity: showTicks ? 1 : 0,
-          transition: reduceMotion ? 'none' : `opacity ${FADE_MS}ms ease-out`,
-          pointerEvents: 'none',
-        }}
-      >
-        <line
-          x1={tickX1}
-          x2={tickX2}
-          y1={tickHalfY}
-          y2={tickHalfY}
-          stroke="var(--lqv-fg)"
-          strokeWidth={1}
-          strokeOpacity={0.32}
-        />
-        <line
-          x1={tickX1}
-          x2={tickX2}
-          y1={tickFullY}
-          y2={tickFullY}
-          stroke="var(--lqv-fg)"
-          strokeWidth={1}
-          strokeOpacity={0.32}
-        />
-      </g>
-
-      {/* Live indicator — left-pointing arrow + numeric label, anchored
-          at (indicatorX, indicatorY). Position updates instantly during
-          a live hold; cross-fades on votes ⇆ 0 via CSS opacity. */}
-      <g
-        aria-hidden
-        style={{
-          opacity: showIndicator ? 1 : 0,
-          transition: reduceMotion ? 'none' : `opacity ${FADE_MS}ms ease-out`,
-          pointerEvents: 'none',
-        }}
-      >
-        {instantUpdate || reduceMotion ? (
-          <g transform={`translate(${indicatorX} ${indicatorY})`}>
-            <IndicatorContents votes={announcedVotes} />
+      {/* Measuring stick — persistent 0–10 ruler on the outer right
+          edge. Major ticks (with labels) at 0/2/4/6/8/10; minor ticks
+          (no labels) at 1/3/5/7/9. Tick lines extend LEFT from
+          `rulerAxisX` toward the water; labels sit just right of the
+          axis. Always visible — no fade behaviour. */}
+      <g aria-hidden="true" style={{ pointerEvents: 'none' }}>
+        {MINOR_VALUES.map((v) => (
+          <line
+            key={`minor-${v}`}
+            x1={rulerAxisX - MINOR_TICK_W}
+            x2={rulerAxisX}
+            y1={tickY(v)}
+            y2={tickY(v)}
+            stroke="var(--lqv-fg)"
+            strokeWidth={1}
+            strokeOpacity={0.32}
+          />
+        ))}
+        {MAJOR_VALUES.map((v) => (
+          <g key={`major-${v}`}>
+            <line
+              x1={rulerAxisX - MAJOR_TICK_W}
+              x2={rulerAxisX}
+              y1={tickY(v)}
+              y2={tickY(v)}
+              stroke="var(--lqv-fg)"
+              strokeWidth={1.5}
+              strokeOpacity={0.55}
+            />
+            <text
+              x={labelX}
+              y={tickY(v)}
+              fontSize={LABEL_FONT_SIZE}
+              fontFamily="'Suisse Intl', system-ui, sans-serif"
+              fill="var(--lqv-fg)"
+              fillOpacity={0.6}
+              dominantBaseline="middle"
+              textAnchor="start"
+              style={{ fontVariantNumeric: 'tabular-nums' }}
+            >
+              {v}
+            </text>
           </g>
-        ) : (
-          <motion.g
-            initial={false}
-            animate={{ x: indicatorX, y: indicatorY }}
-            transition={{ duration: POSITION_MS / 1000, ease: POSITION_EASE }}
-          >
-            <IndicatorContents votes={announcedVotes} />
-          </motion.g>
-        )}
+        ))}
       </g>
     </svg>
   );
 };
-
-const IndicatorContents = ({ votes }: { votes: number }) => (
-  <>
-    {/* Left-pointing arrow — apex at (0, 0) (the gauge anchor); base
-        on the right at (ARROW_SIZE, ±ARROW_SIZE/2). */}
-    <path
-      d={`M 0 0 L ${ARROW_SIZE} ${-ARROW_SIZE / 2} L ${ARROW_SIZE} ${ARROW_SIZE / 2} Z`}
-      fill="var(--lqv-fg)"
-      fillOpacity={0.55}
-    />
-    {/* Numeric label, vertically centered on the gauge anchor. */}
-    <text
-      x={ARROW_SIZE + 4}
-      y={0}
-      fontSize={11}
-      fontFamily="'Suisse Intl', system-ui, sans-serif"
-      fill="var(--lqv-fg)"
-      fillOpacity={0.7}
-      dominantBaseline="middle"
-      textAnchor="start"
-      style={{ fontVariantNumeric: 'tabular-nums' }}
-    >
-      {votes.toFixed(1)}
-    </text>
-  </>
-);
