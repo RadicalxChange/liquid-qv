@@ -346,6 +346,7 @@ export const LiquidQV = ({
                 maxVotes={cap}
                 label={`Votes for ${item.title}`}
                 instantUpdate={isActive}
+                isAnyPouring={Boolean(activePour)}
                 onPourStart={(direction) =>
                   direction === 'in' ? handlers.startPourIn() : handlers.startPourOut()
                 }
