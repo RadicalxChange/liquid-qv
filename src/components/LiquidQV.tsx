@@ -10,6 +10,7 @@ import {
   costForVotes,
   maxVotes as capFor,
   remainingCredits,
+  snapVotesToInteger,
 } from '../math/qv';
 import { initialState, reducer } from '../lib/reducer';
 import { defaultBallot, BALLOT_PROMPT } from '../data/defaultBallot';
@@ -70,8 +71,10 @@ const themeToCssVars = (theme: ThemeOverrides | undefined): Record<string, strin
   return out;
 };
 
-/** Round to one decimal — display-only, never used in conservation math. */
-const fmt = (n: number): string => (Math.round(n * 10) / 10).toFixed(1);
+/** Display formatter — integers everywhere. State may still be
+ *  fractional during a hold (the live derivation), but every visible
+ *  number rounds at the boundary. */
+const fmt = (n: number): string => Math.round(n).toString();
 
 /**
  * Compute the live (in-flight) vote count for the active item at a
@@ -201,15 +204,18 @@ export const LiquidQV = ({
     if (!pour) return;
     const startVotes = state.votes[pour.itemId] ?? 0;
 
-    // Use the live continuous value at the moment of release. No
-    // rounding to integer — the value is what duration × rate produced.
+    // Snap to the nearest integer that fits the cap and the remaining
+    // pool. Round-half-up via Math.round, then clamp DOWN if the
+    // rounded value would overdraw — see the brief's edge cases:
+    // a release at 9.6 with others holding the pool to 75 credits
+    // rounds to 10, then clamps to ⌊√75⌋ = 8.
     const liveAtRelease = computeLiveVotes(
       pour,
       state.votes,
       state.budget,
       performance.now(),
     );
-    const finalVotes = clampVotesAgainstBudget(
+    const finalVotes = snapVotesToInteger(
       liveAtRelease.activeVotes,
       pour.itemId,
       state.votes,
@@ -346,7 +352,6 @@ export const LiquidQV = ({
                 maxVotes={cap}
                 label={`Votes for ${item.title}`}
                 instantUpdate={isActive}
-                isAnyPouring={Boolean(activePour)}
                 onPourStart={(direction) =>
                   direction === 'in' ? handlers.startPourIn() : handlers.startPourOut()
                 }

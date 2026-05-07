@@ -35,10 +35,11 @@ interface Props {
 export const CreditPool = ({ remaining, budget, readout, height = 84 }: Props) => {
   const reduceMotion = useReducedMotion();
   const fillRatio = budget > 0 ? Math.max(0, Math.min(1, remaining / budget)) : 0;
-  const display = readout ?? (Math.round(remaining * 10) / 10).toFixed(1);
-  // ARIA mirrors the displayed one-decimal readout — what a sighted
-  // user reads is what a screen-reader user hears.
-  const remainingDisplay = Math.round(remaining * 10) / 10;
+  // Round 11 — integer display everywhere. Underlying `remaining` may
+  // still be fractional during a hold (the live derivation), but the
+  // visible number rounds at the boundary.
+  const remainingInt = Math.round(remaining);
+  const display = readout ?? remainingInt.toString();
 
   return (
     <div
@@ -47,7 +48,7 @@ export const CreditPool = ({ remaining, budget, readout, height = 84 }: Props) =
       aria-label="Credits remaining in the pool"
       aria-valuemin={0}
       aria-valuemax={budget}
-      aria-valuenow={remainingDisplay}
+      aria-valuenow={remainingInt}
       aria-valuetext={`${display} of ${budget} credits remaining`}
     >
       <div
