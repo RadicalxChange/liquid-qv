@@ -17,26 +17,33 @@ import { defaultBallot, BALLOT_PROMPT } from '../data/defaultBallot';
 import type { LiquidQVProps, ThemeOverrides, VoteMap } from '../types';
 
 /*
- * LiquidQV — the public component, reworked in round 6 around continuous
- * real-valued votes and a pure hold-only physics: every interaction
- * (brief press, long hold, keyboard hold) obeys the same rule —
- * transferred credits = duration × rate. There is no integer mode and
- * no tap-as-+1 shortcut.
+ * LiquidQV — the public component.
+ *
+ * Round 12 (negative voting): each funnel is a vertical *diamond* —
+ * upper V for support, lower V for opposition, both meeting at the
+ * midline at vote = 0. Hold "+" to move the water level UP regardless
+ * of where it currently is; hold "−" to move it DOWN. Crossing zero
+ * is a smooth continuation; cost is votes² in either direction.
  *
  * Architecture
  * ------------
- * The reducer stores real-valued votes per item; the conservation
- * invariant `pool + Σ votes² = budget` holds at every committed state
- * for any reals. While a hold is in flight, an `activePour` transient
- * lets us derive the live water level without dispatching every frame
- * (would otherwise spam the live region announcement). On release we
- * clamp the live continuous value against the cap and the remaining
- * pool, then dispatch — no rounding to integer.
+ * The reducer stores signed integer votes ∈ [−cap, +cap] at rest. The
+ * conservation invariant `pool + Σ votes² = budget` holds at every
+ * committed state. While a hold is in flight, an `activePour`
+ * transient tracks the *signed credits* — `s = sign(v) × v²` — which
+ * is monotonic during a hold (+R per second when "+" is held, −R per
+ * second when "−" is held). At any moment v = sign(s) × √|s|. This
+ * lets the water cross v=0 without any special case: the user holds
+ * "−" all the way through the upper V, past the apex, and into the
+ * lower V; ds/dt stays at −R the whole time and the rendering stays
+ * continuous.
  *
- * Reduced motion: the same physics still applies. A press transfers
- * credits proportional to duration. The visible stream and per-frame
- * value updates are suppressed; the state simply jumps from pre-press
- * to post-press values without animation.
+ * On release we round the live |votes| half-AWAY-from-zero, reapply
+ * the sign, and clamp against ±cap and the remaining pool — the
+ * `snapVotesToInteger` helper does this in one call.
+ *
+ * Reduced motion: same physics applies; the visible stream and per-
+ * frame value updates are suppressed.
  */
 
 const POUR_RATE = 5; // credits per second
@@ -44,9 +51,11 @@ const FADE_VISUAL_MS = 150;
 
 interface ActivePour {
   itemId: string;
+  /** "in" = "+" = move v UP. "out" = "−" = move v DOWN. */
   direction: 'in' | 'out';
   startedAt: number; // performance.now()
-  startCredits: number; // (startVotes)²
+  /** Signed credits at the moment the hold started: sign(v0) × v0². */
+  startSigned: number;
 }
 
 interface FadeStream {
@@ -71,15 +80,34 @@ const themeToCssVars = (theme: ThemeOverrides | undefined): Record<string, strin
   return out;
 };
 
-/** Display formatter — integers everywhere. State may still be
- *  fractional during a hold (the live derivation), but every visible
- *  number rounds at the boundary. */
-const fmt = (n: number): string => Math.round(n).toString();
+/** Display formatter for signed votes — rounded integer with sign on
+ *  non-zero values. Uses the real Unicode minus (U+2212) so the digit
+ *  width matches the plus and "−4" doesn't look like a hyphen. State
+ *  may still be fractional during a hold; this rounds at the boundary. */
+const fmtVotes = (n: number): string => {
+  const r = Math.round(n);
+  if (r === 0) return '0';
+  if (r > 0) return `+${r}`;
+  return `−${Math.abs(r)}`;
+};
+
+/** Display formatter for credits — non-negative integer. Cost is
+ *  votes², so the sign of v drops out before we get here. */
+const fmtCredits = (n: number): string => Math.round(Math.abs(n)).toString();
 
 /**
- * Compute the live (in-flight) vote count for the active item at a
- * given absolute time, plus the pool that follows from it. Other items
- * stay at their committed values.
+ * Compute the live (in-flight) signed vote count for the active item
+ * at a given absolute time, plus the pool that follows from it.
+ *
+ * We track *signed credits* `s = sign(v) × v²` rather than v directly:
+ * during any hold s changes monotonically (+R per second when "+" is
+ * held, −R per second when "−" is held), so the user crossing the
+ * midline (v = 0) is just s passing through 0 — no special case.
+ *
+ * The clamp is symmetric: |s| ≤ availableCreditsFor (the budget left
+ * after other items' costs). The active vote count comes back out as
+ *
+ *     v = sign(s) × √|s|
  */
 const computeLiveVotes = (
   pour: ActivePour,
@@ -89,14 +117,13 @@ const computeLiveVotes = (
 ): { votes: VoteMap; pool: number; activeVotes: number } => {
   const elapsed = Math.max(0, (now - pour.startedAt) / 1000);
   const transferred = elapsed * POUR_RATE;
-  const budgetForThis = availableCreditsFor(pour.itemId, votes, budget);
-  let creditsForThis: number;
-  if (pour.direction === 'in') {
-    creditsForThis = Math.min(pour.startCredits + transferred, budgetForThis, budget);
-  } else {
-    creditsForThis = Math.max(pour.startCredits - transferred, 0);
-  }
-  const activeVotes = Math.sqrt(creditsForThis);
+  const dir = pour.direction === 'in' ? 1 : -1; // "+" moves s UP, "−" moves s DOWN
+  const proposedSigned = pour.startSigned + dir * transferred;
+  // Clamp |s| ≤ availableCreditsFor (which is also ≤ budget).
+  const maxAbsSigned = availableCreditsFor(pour.itemId, votes, budget);
+  const clampedSigned = Math.max(-maxAbsSigned, Math.min(proposedSigned, maxAbsSigned));
+  const activeVotes =
+    clampedSigned === 0 ? 0 : Math.sign(clampedSigned) * Math.sqrt(Math.abs(clampedSigned));
   const liveVotes: VoteMap = { ...votes, [pour.itemId]: activeVotes };
   const pool = remainingCredits(budget, liveVotes);
   return { votes: liveVotes, pool, activeVotes };
@@ -184,16 +211,23 @@ export const LiquidQV = ({
   // ---------------------------------------------------------------------
   const startPour = useCallback(
     (itemId: string, direction: 'in' | 'out') => {
-      // Don't start a pour that can't move (already at 0 draining or at cap pouring).
+      // Don't start a pour that can't move:
+      //   "+" held but already at +cap (water can't go higher)
+      //   "−" held but already at −cap (water can't go lower)
+      // Otherwise the pour begins; crossing v=0 is allowed.
       const startVotes = state.votes[itemId] ?? 0;
-      if (direction === 'out' && startVotes <= 0) return;
-      const ceiling = clampVotesAgainstBudget(cap, itemId, state.votes, state.budget);
-      if (direction === 'in' && startVotes >= ceiling - 1e-9) return;
+      const ceilingAbs = Math.abs(
+        clampVotesAgainstBudget(cap, itemId, state.votes, state.budget),
+      );
+      if (direction === 'in' && startVotes >= ceilingAbs - 1e-9) return;
+      if (direction === 'out' && startVotes <= -ceilingAbs + 1e-9) return;
+      const startSigned =
+        startVotes === 0 ? 0 : Math.sign(startVotes) * startVotes * startVotes;
       setActivePour({
         itemId,
         direction,
         startedAt: performance.now(),
-        startCredits: startVotes * startVotes,
+        startSigned,
       });
     },
     [cap, state.votes, state.budget],
@@ -254,15 +288,18 @@ export const LiquidQV = ({
   const resetAll = useCallback(() => dispatch({ type: 'reset-all' }), []);
   const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
 
-  // Live region announces committed state changes (one-decimal
-  // rounded). The reducer's `transfer` field fires once per dispatch,
-  // so this only announces on release, not during a hold.
+  // Live region announces committed state changes. The reducer's
+  // `transfer` field fires once per dispatch, so this only announces
+  // on release, not during a hold. Signed voting: "+3 votes for X"
+  // and "−3 votes for X" both cost 9 credits, communicated separately.
   const liveAnnouncement = useMemo(() => {
     if (!state.transfer) return '';
     const item = items.find((i) => i.id === state.transfer!.itemId);
-    const v = state.votes[state.transfer.itemId] ?? 0;
+    const v = Math.round(state.votes[state.transfer.itemId] ?? 0);
     const c = costForVotes(v);
-    return `${item?.title ?? state.transfer.itemId}: ${fmt(v)} votes, ${fmt(c)} credits.`;
+    const voteWord = Math.abs(v) === 1 ? 'vote' : 'votes';
+    const creditWord = c === 1 ? 'credit' : 'credits';
+    return `${item?.title ?? state.transfer.itemId}: ${fmtVotes(v)} ${voteWord}, ${c} ${creditWord}.`;
   }, [state.transfer, state.votes, items]);
 
   const streamFor = (
@@ -294,7 +331,11 @@ export const LiquidQV = ({
         )}
       </header>
 
-      <CreditPool remaining={livePool} budget={state.budget} readout={fmt(livePool)} />
+      <CreditPool
+        remaining={livePool}
+        budget={state.budget}
+        readout={Math.round(livePool).toString()}
+      />
 
       {/* Live region for screen readers — announces only at-rest changes. */}
       <div className="sr-only" aria-live="polite" aria-atomic="true">
@@ -305,13 +346,23 @@ export const LiquidQV = ({
         {items.map((item) => {
           const v = liveVotes[item.id] ?? 0;
           const isActive = activePour?.itemId === item.id;
-          const credits = v * v; // real-valued, no flooring
+          const credits = v * v; // squaring handles sign — cost is always ≥ 0
           const stream = streamFor(item.id);
           const handlers = itemHandlers[item.id];
           const startVotes = state.votes[item.id] ?? 0;
-          const ceiling = clampVotesAgainstBudget(cap, item.id, state.votes, state.budget);
-          const canPour = startVotes < ceiling - 1e-9;
-          const canDrain = startVotes > 1e-9;
+          // "+" enabled when v can move UP, "−" when v can move DOWN.
+          // The available signed range is [−ceilingAbs, +ceilingAbs] given
+          // the rest of the pool's draw.
+          const ceilingAbs = Math.abs(
+            clampVotesAgainstBudget(cap, item.id, state.votes, state.budget),
+          );
+          const canPour = startVotes < ceilingAbs - 1e-9;
+          const canDrain = startVotes > -ceilingAbs + 1e-9;
+          const canReset = startVotes !== 0;
+          const displayedVotes = Math.round(v);
+          const displayedCredits = Math.round(credits);
+          const voteWord = Math.abs(displayedVotes) === 1 ? 'vote' : 'votes';
+          const creditWord = displayedCredits === 1 ? 'credit' : 'credits';
           return (
             <div
               key={item.id}
@@ -333,7 +384,7 @@ export const LiquidQV = ({
                 <button
                   type="button"
                   onClick={() => resetItem(item.id)}
-                  disabled={!canDrain}
+                  disabled={!canReset}
                   className="text-size--3 underline text-[var(--lqv-water)] hover:text-[var(--lqv-water-dark)] disabled:opacity-40 disabled:no-underline"
                   aria-label={`Reset votes on ${item.title}`}
                 >
@@ -364,9 +415,9 @@ export const LiquidQV = ({
                   style={{ color: 'var(--lqv-fg)' }}
                   aria-live="off"
                 >
-                  {fmt(v)} votes
+                  {fmtVotes(displayedVotes)} {voteWord}
                   <span className="ml-2 text-size--2 font-body text-[var(--lqv-muted)] tabular-nums">
-                    {fmt(credits)} credits
+                    {fmtCredits(displayedCredits)} {creditWord}
                   </span>
                 </p>
 
@@ -374,14 +425,14 @@ export const LiquidQV = ({
                   <PourControl
                     direction="out"
                     disabled={!canDrain}
-                    ariaLabel={`Drain ${item.title}. Hold to drain — release to stop.`}
+                    ariaLabel={`Move ${item.title}'s vote down. Hold to continue; release to stop. Crosses zero into negative votes.`}
                     onPourStart={handlers.startPourOut}
                     onPourEnd={handlers.end}
                   />
                   <PourControl
                     direction="in"
                     disabled={!canPour}
-                    ariaLabel={`Pour into ${item.title}. Hold to pour — release to stop.`}
+                    ariaLabel={`Move ${item.title}'s vote up. Hold to continue; release to stop. Crosses zero into positive votes.`}
                     onPourStart={handlers.startPourIn}
                     onPourEnd={handlers.end}
                   />
