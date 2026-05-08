@@ -72,7 +72,10 @@ export const CreditPool = ({ remaining, budget, readout, height = 84 }: Props) =
             ease: [0.22, 1, 0.36, 1],
           }}
           style={{
-            background: 'linear-gradient(180deg, var(--lqv-pool) 0%, var(--lqv-water) 100%)',
+            // Round 13: pool is the shared budget, doesn't pick a side.
+            // Neutral gray-blue gradient so it doesn't read as aligned
+            // with green-water (positive) or red-water (negative).
+            background: 'linear-gradient(180deg, var(--lqv-pool) 0%, var(--lqv-pool-dark) 100%)',
             boxShadow: 'inset 0 -2px 6px rgba(255, 255, 255, 0.18)',
           }}
         />

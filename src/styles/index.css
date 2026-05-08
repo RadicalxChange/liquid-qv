@@ -21,9 +21,20 @@
   --lqv-fg: #010101;
   --lqv-muted: #5b5b5b;
   --lqv-accent: #edff38;
-  --lqv-water: #1773b5;
-  --lqv-water-dark: #0a3252;
-  --lqv-pool: #2e8fcc;
+  /* Water palette — round 13: green for support, red for opposition.
+     `--lqv-water` is kept as a generic / neutral fallback (used by
+     CreditPool's gradient, focus rings, etc.) and is now neutral. */
+  --lqv-water: #94a3b8;
+  --lqv-water-dark: #475569;
+  /* Sign-keyed water colors. Sat-mid green and red — readable
+     against the dark background, both clearly distinguishable. */
+  --lqv-vote-positive: #16a34a;
+  --lqv-vote-positive-dark: #0e6b32;
+  --lqv-vote-negative: #c53030;
+  --lqv-vote-negative-dark: #822121;
+  /* Pool reservoir — neutral gray-blue, doesn't take a side. */
+  --lqv-pool: #94a3b8;
+  --lqv-pool-dark: #64748b;
   --lqv-funnel-wall: #c9c6b6;
   --lqv-funnel-bg: #ffffff;
   --lqv-shadow: rgba(10, 50, 82, 0.12);
@@ -36,9 +47,14 @@
     --lqv-fg: #f2f1ea;
     --lqv-muted: #b6b3a4;
     --lqv-accent: #edff38;
-    --lqv-water: #5fb1de;
-    --lqv-water-dark: #9dceeb;
-    --lqv-pool: #2e8fcc;
+    --lqv-water: #94a3b8;
+    --lqv-water-dark: #cbd5e1;
+    --lqv-vote-positive: #34d399;
+    --lqv-vote-positive-dark: #0e6b3e;
+    --lqv-vote-negative: #f87171;
+    --lqv-vote-negative-dark: #7f1d1d;
+    --lqv-pool: #94a3b8;
+    --lqv-pool-dark: #64748b;
     --lqv-funnel-wall: #2a3340;
     --lqv-funnel-bg: #0e141c;
     --lqv-shadow: rgba(0, 0, 0, 0.5);
