@@ -1,36 +1,30 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { type CSSProperties, type KeyboardEvent, useEffect, useId, useRef } from 'react';
+import { voteColor, voteColorDark } from '../lib/voteColor';
 
 /*
- * Funnel — a vertical *diamond* in round 12. Two 90°-apex V-troughs
- * meet at a horizontal midline at vote = 0. The upper V holds water
- * for support (votes > 0); the lower V holds water for opposition
- * (votes < 0). The shape is exactly symmetric — pouring a vote
- * against costs the same as pouring it for, and the slowdown is
- * symmetric too.
+ * Funnel — a single upward-opening V whose water level *is* the |vote|
+ * count and whose water area *is* the credits spent. Two equations:
  *
- *     +10  ─────────────────────  upper rim
- *           \                  /
- *            \      v > 0     /   (water in upper V)
- *             \              /
- *      0  ────●──────────────●────  midline (apex of both Vs)
- *             /              \
- *            /      v < 0     \    (water in lower V)
- *           /                  \
- *     −10  ─────────────────────  lower rim
+ *     |votes|  = h            (water height in funnel-units)
+ *     credits  = h²           (water area: ½ · 2h · h)
  *
- * Two equations:
+ * Round 13 (color by sign): the diamond from PR #10 is gone. The
+ * funnel always opens upward and water always rises with gravity. The
+ * SIGN of the vote is conveyed by *color* — green for support, red
+ * for opposition — and by the under-funnel readout's explicit sign.
  *
- *     |votes|  = h           (water height from midline, in funnel-units)
- *     credits  = h²          (water area: ½ · 2h · h)
+ * The state and math layers from PR #10 stay: votes are signed
+ * integers at rest, the reducer's conservation invariant is
+ * `pool + Σ votes_i² = budget`, and a "−" hold from a positive funnel
+ * still drains through zero and refills on the negative side. What
+ * the user sees flip during that move is only the water's *color*:
+ * green draining → empty → red filling. Geometry doesn't move.
  *
- * Sign comes from which V the water sits in. The conservation
- * invariant generalises cleanly — sign drops out of the squaring.
- *
- * `votes` is a signed integer at rest and may be a signed real during
- * an active hold. The water polygon, midline, and outline render
- * directly from it. ARIA reports the integer-rounded signed value
- * (the same number the under-funnel readout shows).
+ * `votes` may be a signed real during a live hold (the parent passes
+ * the live continuous value); the water polygon and surface line
+ * render directly from `|votes|`. ARIA reports the integer-rounded
+ * signed value to match the under-funnel readout.
  */
 
 interface FunnelProps {
@@ -57,14 +51,13 @@ interface FunnelProps {
   style?: CSSProperties;
 }
 
-// Ruler layout constants — same shape as the unipolar 0–10 ruler, just
-// extended to span both Vs.
+// Ruler layout constants — unsigned 0–10 magnitude scale.
 const RULER_GAP = 4;
 const MAJOR_TICK_W = 10;
 const MINOR_TICK_W = 5;
 const LABEL_OFFSET = 4;
 const LABEL_FONT_SIZE = 10;
-const LABEL_RESERVE = 22; // approx room for "−10" / "+10" — wider than 0–10
+const LABEL_RESERVE = 14;
 const RULER_RIGHT_PAD = 4;
 const POSITION_EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -83,67 +76,49 @@ export const Funnel = ({
 
   const holdKeyRef = useRef<string | null>(null);
 
-  // SVG layout — width-driven. Funnel cavity = size − pads; per-V
-  // height = funnel cavity / 2 (45° walls). The diamond is twice as
-  // tall as the unipolar funnel was (upper V + lower V around midline).
+  // SVG layout — width-driven. Funnel cavity = size − pads; V height
+  // = funnel cavity / 2 (45° walls). Single upward V again — same
+  // proportions as PR #11.
   const PAD_TOP = 14;
   const PAD_LEFT = 14;
   const PAD_RIGHT = 14;
   const PAD_BOTTOM = 18;
   const funnelWidth = size - PAD_LEFT - PAD_RIGHT;
-  const usableHeight = funnelWidth / 2; // height per V
+  const usableHeight = funnelWidth / 2;
   const cx = PAD_LEFT + funnelWidth / 2;
-  const midY = PAD_TOP + usableHeight; // y-coord of the midline (vote = 0)
-  // Linear vote-to-y mapping: y(v) = midY − v × SCALE.
-  // For v = +cap → y = midY − usableHeight (upper rim).
-  // For v = −cap → y = midY + usableHeight (lower rim).
+  const apexY = PAD_TOP + usableHeight;
   const SCALE = maxVotes > 0 ? usableHeight / maxVotes : 1;
 
-  // Diamond outline geometry.
-  const upperRimY = midY - usableHeight;
-  const lowerRimY = midY + usableHeight;
-  const leftX = cx - usableHeight;
-  const rightX = cx + usableHeight;
+  // Water polygon — based on |votes| only. Height grows upward from
+  // the apex. Always emit a valid path (degenerate triangle at h=0)
+  // so Framer Motion can interpolate.
+  const absVotes = Math.min(Math.abs(votes), maxVotes);
+  const h = absVotes * SCALE;
+  const waterPath = `M ${cx} ${apexY} L ${cx - h} ${apexY - h} L ${cx + h} ${apexY - h} Z`;
+  const surfaceY = apexY - h;
+  const waterFill = voteColor(votes);
+  const waterSurfaceStroke = voteColorDark(votes);
 
-  // Water polygon — unified for both Vs. h = |v| × SCALE; surface y is
-  // midY − sign(v) × h. At v = 0 the path collapses to a single point
-  // at the apex (still emits a valid `M L L Z` so Framer Motion can
-  // interpolate without warning).
-  const h = Math.min(Math.abs(votes), maxVotes) * SCALE;
-  const surfaceY = midY - Math.sign(votes) * h;
-  const waterPath = `M ${cx} ${midY} L ${cx - h} ${surfaceY} L ${cx + h} ${surfaceY} Z`;
+  // Funnel outline: left-rim → apex → right-rim.
+  const fullH = usableHeight;
+  const outlinePath = `M ${cx - fullH} ${apexY - fullH} L ${cx} ${apexY} L ${cx + fullH} ${apexY - fullH}`;
+  const rimY = apexY - fullH;
 
-  // Diamond outline as two V paths (upper opens UP, lower opens DOWN —
-  // both have apex at the midline). Drawn separately from the rim
-  // lines so we can give the rims a flatter cap stroke.
-  const upperOutline = `M ${leftX} ${upperRimY} L ${cx} ${midY} L ${rightX} ${upperRimY}`;
-  const lowerOutline = `M ${leftX} ${lowerRimY} L ${cx} ${midY} L ${rightX} ${lowerRimY}`;
-
-  // Ruler geometry. Tick "axis" is at rulerAxisX; ticks point LEFT
-  // toward the water; labels sit just to the right of the axis.
-  const rulerAxisX = rightX + RULER_GAP + MAJOR_TICK_W;
+  // Ruler geometry — unsigned 0–10 magnitude scale.
+  const rightEdgeX = cx + fullH;
+  const rulerAxisX = rightEdgeX + RULER_GAP + MAJOR_TICK_W;
   const labelX = rulerAxisX + LABEL_OFFSET;
   const viewBoxW = labelX + LABEL_RESERVE + RULER_RIGHT_PAD;
-  const viewBoxH = PAD_TOP + 2 * usableHeight + PAD_BOTTOM;
+  const viewBoxH = PAD_TOP + usableHeight + PAD_BOTTOM;
 
-  const tickY = (voteLevel: number) => midY - voteLevel * SCALE;
-
-  // Major ticks at every even integer including 0; minor ticks at the
-  // odd integers between. Range −10 to +10 (assuming integer cap of 10).
-  const MAJOR_VALUES = [10, 8, 6, 4, 2, 0, -2, -4, -6, -8, -10];
-  const MINOR_VALUES = [9, 7, 5, 3, 1, -1, -3, -5, -7, -9];
-
-  // Sign-aware label formatter — Unicode minus on negatives, "+" on
-  // positives, plain "0" on zero. Matches the under-funnel readout.
-  const fmtTickLabel = (n: number): string => {
-    if (n === 0) return '0';
-    if (n > 0) return `+${n}`;
-    return `−${Math.abs(n)}`;
-  };
+  const tickY = (voteLevel: number) => apexY - voteLevel * SCALE;
+  // 0/2/4/6/8/10 — major; 1/3/5/7/9 — minor.
+  const MAJOR_VALUES = [0, 2, 4, 6, 8, 10];
+  const MINOR_VALUES = [1, 3, 5, 7, 9];
 
   // Keyboard:
-  //   Space / Enter held → "+" (move v up; release ends pour)
-  //   Shift + Space/Enter held → "−" (move v down)
+  //   Space / Enter held → "+" (move v UP, release ends pour)
+  //   Shift + Space/Enter held → "−" (move v DOWN)
   const handleKeyDown = (e: KeyboardEvent<SVGSVGElement>) => {
     if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter') {
       if (e.repeat || holdKeyRef.current) return;
@@ -168,12 +143,16 @@ export const Funnel = ({
     return () => window.removeEventListener('blur', cancel);
   }, [onPourEnd]);
 
+  // ARIA — match the under-funnel readout exactly. Signed votes,
+  // non-negative credits.
   const announcedVotes = Math.round(votes);
   const announcedCredits = announcedVotes * announcedVotes;
   const ariaVoteText =
     announcedVotes === 0
       ? '0 votes'
-      : `${fmtTickLabel(announcedVotes)} ${Math.abs(announcedVotes) === 1 ? 'vote' : 'votes'}`;
+      : `${announcedVotes > 0 ? '+' : '−'}${Math.abs(announcedVotes)} ${
+          Math.abs(announcedVotes) === 1 ? 'vote' : 'votes'
+        }`;
   return (
     <svg
       viewBox={`0 0 ${viewBoxW} ${viewBoxH}`}
@@ -192,37 +171,34 @@ export const Funnel = ({
       className="block"
       data-funnel-id={sliderId}
     >
-      {/* Background card — soft surface inside the diamond's bounding box. */}
+      {/* Background card — soft surface inside the funnel cavity. */}
       <rect
         x={PAD_LEFT - 6}
-        y={upperRimY - 6}
+        y={PAD_TOP - 6}
         width={funnelWidth + 12}
-        height={2 * usableHeight + 12}
+        height={usableHeight + 12}
         rx={10}
         fill="var(--lqv-funnel-bg)"
         stroke="var(--lqv-funnel-wall)"
         strokeWidth={1}
       />
 
-      {/* Water — unified path covering both Vs. Polygon area equals
-          credits = votes² regardless of sign. instantUpdate skips
-          motion's interpolation so the rAF-driven `votes` prop renders
-          frame-for-frame during a live hold. */}
+      {/* Water — colour reflects the SIGN of the current vote. Polygon
+          area = h² = credits regardless of sign. */}
       {instantUpdate || reduceMotion ? (
-        <path d={waterPath} fill="var(--lqv-water)" style={{ pointerEvents: 'none' }} />
+        <path d={waterPath} fill={waterFill} style={{ pointerEvents: 'none' }} />
       ) : (
         <motion.path
           d={waterPath}
           initial={false}
-          fill="var(--lqv-water)"
+          fill={waterFill}
           animate={{ d: waterPath }}
           transition={{ duration: 0.15, ease: POSITION_EASE }}
           style={{ pointerEvents: 'none' }}
         />
       )}
 
-      {/* Subtle highlight at the water surface (skipped at v = 0 — no
-          surface). */}
+      {/* Subtle highlight at the water surface (hidden at v = 0). */}
       {h > 0 &&
         (instantUpdate || reduceMotion ? (
           <line
@@ -230,7 +206,7 @@ export const Funnel = ({
             x2={cx + h}
             y1={surfaceY}
             y2={surfaceY}
-            stroke="var(--lqv-water-dark)"
+            stroke={waterSurfaceStroke}
             strokeWidth={1.25}
             strokeOpacity={0.7}
             style={{ pointerEvents: 'none' }}
@@ -242,7 +218,7 @@ export const Funnel = ({
             y1={surfaceY}
             y2={surfaceY}
             initial={false}
-            stroke="var(--lqv-water-dark)"
+            stroke={waterSurfaceStroke}
             strokeWidth={1.25}
             strokeOpacity={0.7}
             animate={{ x1: cx - h, x2: cx + h, y1: surfaceY, y2: surfaceY }}
@@ -251,61 +227,33 @@ export const Funnel = ({
           />
         ))}
 
-      {/* Diamond outline — both Vs sharing an apex at the midline. Drawn
-          last so the walls sit on top of the water. */}
+      {/* Funnel walls drawn last so they sit on top of the water. The
+          wall colour stays neutral (uses the structural `--lqv-water-dark`
+          token) — the funnel itself is the same vessel regardless of
+          which way the user is voting. */}
       <path
-        d={upperOutline}
+        d={outlinePath}
         fill="none"
         stroke="var(--lqv-water-dark)"
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <path
-        d={lowerOutline}
-        fill="none"
-        stroke="var(--lqv-water-dark)"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
 
-      {/* Upper and lower rims — short horizontals at the ±cap levels. */}
+      {/* Rim — short horizontal at the cap. */}
       <line
-        x1={leftX}
-        x2={rightX}
-        y1={upperRimY}
-        y2={upperRimY}
-        stroke="var(--lqv-water-dark)"
-        strokeWidth={2}
-        strokeLinecap="round"
-      />
-      <line
-        x1={leftX}
-        x2={rightX}
-        y1={lowerRimY}
-        y2={lowerRimY}
+        x1={cx - fullH}
+        x2={cx + fullH}
+        y1={rimY}
+        y2={rimY}
         stroke="var(--lqv-water-dark)"
         strokeWidth={2}
         strokeLinecap="round"
       />
 
-      {/* Midline — the resting state at vote = 0. Faint by default; a
-          touch brighter when v = 0 so the rest state reads clearly. */}
-      <line
-        x1={leftX}
-        x2={rightX}
-        y1={midY}
-        y2={midY}
-        stroke="var(--lqv-fg)"
-        strokeWidth={1}
-        strokeOpacity={announcedVotes === 0 ? 0.4 : 0.18}
-      />
-
-      {/* Measuring stick — −cap to +cap. Major ticks at every even
-          integer including 0, with signed labels. Minor ticks at odd
-          integers, no labels. Tick marks point LEFT toward the water;
-          labels sit just right of the axis. Always visible. */}
+      {/* Measuring stick — unsigned 0 to 10 magnitude. Direction is
+          conveyed by water colour and the under-funnel readout's sign,
+          not by the ruler. */}
       <g aria-hidden="true" style={{ pointerEvents: 'none' }}>
         {MINOR_VALUES.map((v) => (
           <line
@@ -341,7 +289,7 @@ export const Funnel = ({
               textAnchor="start"
               style={{ fontVariantNumeric: 'tabular-nums' }}
             >
-              {fmtTickLabel(v)}
+              {v}
             </text>
           </g>
         ))}

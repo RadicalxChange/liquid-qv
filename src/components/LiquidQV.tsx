@@ -75,6 +75,11 @@ const themeToCssVars = (theme: ThemeOverrides | undefined): Record<string, strin
   if (theme.water) out['--lqv-water'] = theme.water;
   if (theme.waterDark) out['--lqv-water-dark'] = theme.waterDark;
   if (theme.pool) out['--lqv-pool'] = theme.pool;
+  if (theme.poolDark) out['--lqv-pool-dark'] = theme.poolDark;
+  if (theme.votePositive) out['--lqv-vote-positive'] = theme.votePositive;
+  if (theme.votePositiveDark) out['--lqv-vote-positive-dark'] = theme.votePositiveDark;
+  if (theme.voteNegative) out['--lqv-vote-negative'] = theme.voteNegative;
+  if (theme.voteNegativeDark) out['--lqv-vote-negative-dark'] = theme.voteNegativeDark;
   if (theme.funnelWall) out['--lqv-funnel-wall'] = theme.funnelWall;
   if (theme.funnelBg) out['--lqv-funnel-bg'] = theme.funnelBg;
   return out;
@@ -393,9 +398,10 @@ export const LiquidQV = ({
               </div>
 
               <PourStream
-                visible={stream.visible}
+                visible={stream.visible && Math.abs(v) > 1e-9}
                 direction={stream.direction}
                 mode={stream.mode}
+                voteSign={v}
               />
 
               <Funnel

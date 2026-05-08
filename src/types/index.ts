@@ -12,9 +12,18 @@ export interface ThemeOverrides {
   fg?: string;
   muted?: string;
   accent?: string;
+  /** Generic / neutral water tone (not used by funnel water in round 13;
+   *  retained for legacy embeds and the focus-ring). */
   water?: string;
   waterDark?: string;
+  /** Pool reservoir colours — neutral by default. */
   pool?: string;
+  poolDark?: string;
+  /** Sign-keyed water colours (round 13). */
+  votePositive?: string;
+  votePositiveDark?: string;
+  voteNegative?: string;
+  voteNegativeDark?: string;
   funnelWall?: string;
   funnelBg?: string;
 }

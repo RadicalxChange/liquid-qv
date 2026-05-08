@@ -2,16 +2,14 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 
 /*
- * Explainer — three short steps, dismissed once, reopen-able from a (?)
- * button in the page header.
+ * Explainer — four short steps in round 13 (was three through rounds
+ * 4–12). Dismissed once, reopen-able from the (?) button in the page
+ * header. The fourth step calls out the negative-vote affordance now
+ * that the funnel water turns red on opposition.
  *
- * The brief is firm on "extremely concise" and "no auto-play tutorial
- * animations". Each step is one sentence + a small static SVG. The
- * dismissal lives in localStorage under a single key so an embed can
- * preset it (or wipe it) without reaching into component internals.
- *
- * Renders nothing on the server-pass / first sync render (we read
- * localStorage on mount), then fades in if not yet dismissed.
+ * Each step is one sentence plus a small static SVG. Step 1's funnel
+ * glyph uses the new positive-water green so the colour the user
+ * will see in the tool is what they see in the explainer.
  */
 
 const STORAGE_KEY = 'liquid-qv:explainer-dismissed:v1';
@@ -46,7 +44,14 @@ interface Step {
   illustration: () => JSX.Element;
 }
 
-const FunnelGlyph = ({ fill }: { fill: number }) => {
+const FunnelGlyph = ({
+  fill,
+  tone = 'positive',
+}: {
+  fill: number;
+  /** Which sign-keyed water colour to use. Defaults to positive (green). */
+  tone?: 'positive' | 'negative';
+}) => {
   // h = fill (0..1) * height. credits visible = h².
   const W = 80;
   const H = 40;
@@ -54,16 +59,19 @@ const FunnelGlyph = ({ fill }: { fill: number }) => {
   const apexY = H;
   const fullH = H;
   const h = fill * fullH;
+  const waterVar = tone === 'negative' ? 'var(--lqv-vote-negative)' : 'var(--lqv-vote-positive)';
+  const wallVar =
+    tone === 'negative' ? 'var(--lqv-vote-negative-dark)' : 'var(--lqv-vote-positive-dark)';
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} aria-hidden="true">
       <path
         d={`M ${cx - h} ${apexY - h} L ${cx} ${apexY} L ${cx + h} ${apexY - h} Z`}
-        fill="var(--lqv-water)"
+        fill={waterVar}
       />
       <path
         d={`M ${cx - fullH} 0 L ${cx} ${apexY} L ${cx + fullH} 0`}
         fill="none"
-        stroke="var(--lqv-water-dark)"
+        stroke={wallVar}
         strokeWidth={1.5}
         strokeLinejoin="round"
       />
@@ -91,13 +99,49 @@ const SpreadGlyph = () => (
   <svg viewBox="0 0 110 40" width={110} height={40} aria-hidden="true">
     {/* left-shallow funnel */}
     <g transform="translate(0,0)">
-      <path d="M 12 28 L 20 36 L 28 28 Z" fill="var(--lqv-water)" />
-      <path d="M 0 4 L 20 36 L 40 4" fill="none" stroke="var(--lqv-water-dark)" strokeWidth={1.5} />
+      <path d="M 12 28 L 20 36 L 28 28 Z" fill="var(--lqv-vote-positive)" />
+      <path
+        d="M 0 4 L 20 36 L 40 4"
+        fill="none"
+        stroke="var(--lqv-vote-positive-dark)"
+        strokeWidth={1.5}
+      />
     </g>
     {/* right-deep funnel */}
     <g transform="translate(60,0)">
-      <path d="M 4 14 L 20 36 L 36 14 Z" fill="var(--lqv-water)" />
-      <path d="M 0 4 L 20 36 L 40 4" fill="none" stroke="var(--lqv-water-dark)" strokeWidth={1.5} />
+      <path d="M 4 14 L 20 36 L 36 14 Z" fill="var(--lqv-vote-positive)" />
+      <path
+        d="M 0 4 L 20 36 L 40 4"
+        fill="none"
+        stroke="var(--lqv-vote-positive-dark)"
+        strokeWidth={1.5}
+      />
+    </g>
+  </svg>
+);
+
+/** Side-by-side green-vs-red funnel pair illustrating the negative-vote affordance. */
+const SignedPairGlyph = () => (
+  <svg viewBox="0 0 110 40" width={110} height={40} aria-hidden="true">
+    {/* positive (green) funnel */}
+    <g transform="translate(0,0)">
+      <path d="M 8 24 L 20 36 L 32 24 Z" fill="var(--lqv-vote-positive)" />
+      <path
+        d="M 0 4 L 20 36 L 40 4"
+        fill="none"
+        stroke="var(--lqv-vote-positive-dark)"
+        strokeWidth={1.5}
+      />
+    </g>
+    {/* negative (red) funnel */}
+    <g transform="translate(60,0)">
+      <path d="M 8 24 L 20 36 L 32 24 Z" fill="var(--lqv-vote-negative)" />
+      <path
+        d="M 0 4 L 20 36 L 40 4"
+        fill="none"
+        stroke="var(--lqv-vote-negative-dark)"
+        strokeWidth={1.5}
+      />
     </g>
   </svg>
 );
@@ -126,6 +170,10 @@ const STEPS: Step[] = [
   {
     title: 'Spreading credits across funnels is cheap. Concentrating is expensive.',
     illustration: () => <SpreadGlyph />,
+  },
+  {
+    title: 'Or vote against. Press the − button. The water turns red.',
+    illustration: () => <SignedPairGlyph />,
   },
 ];
 
@@ -166,7 +214,7 @@ export const Explainer = ({ open, onDismiss }: Props) => {
               </button>
             </div>
 
-            <ol className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
+            <ol className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-4">
               {STEPS.map((step, i) => (
                 <li key={i} className="flex flex-col gap-2">
                   <div className="flex h-12 items-center" aria-hidden="true">
