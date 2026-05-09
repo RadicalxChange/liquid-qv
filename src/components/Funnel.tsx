@@ -1,5 +1,6 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { type CSSProperties, type KeyboardEvent, useEffect, useId, useRef } from 'react';
+import { type TickState, tickState } from '../lib/rulerState';
 import { voteColor, voteColorDark } from '../lib/voteColor';
 
 /*
@@ -60,6 +61,55 @@ const LABEL_FONT_SIZE = 10;
 const LABEL_RESERVE = 14;
 const RULER_RIGHT_PAD = 4;
 const POSITION_EASE = [0.22, 1, 0.36, 1] as const;
+
+/**
+ * Round 15: map a tick's `TickState` to its stroke style. Unfilled
+ * ticks keep the muted neutral look from earlier rounds; filled and
+ * current ticks pick up the sign colour. The `current` tick gets a
+ * thicker stroke and full opacity so it reads as the milestone the
+ * user just reached without needing a separate halo element.
+ */
+const tickStrokeStyle = (
+  state: TickState,
+  filledColor: string,
+  isMajor: boolean,
+): { stroke: string; strokeOpacity: number; strokeWidth: number } => {
+  if (state === 'unfilled') {
+    return {
+      stroke: 'var(--lqv-fg)',
+      strokeOpacity: isMajor ? 0.55 : 0.32,
+      strokeWidth: isMajor ? 1.5 : 1,
+    };
+  }
+  if (state === 'filled') {
+    return {
+      stroke: filledColor,
+      strokeOpacity: 0.85,
+      strokeWidth: isMajor ? 2 : 1.5,
+    };
+  }
+  // current — slightly heavier and fully opaque
+  return {
+    stroke: filledColor,
+    strokeOpacity: 1,
+    strokeWidth: isMajor ? 3 : 2,
+  };
+};
+
+/** Round 15: label style follows the tick state. Current label
+ *  also gets a slightly heavier weight so it reads as a peak. */
+const tickLabelStyle = (
+  state: TickState,
+  filledColor: string,
+): { fill: string; fillOpacity: number; fontWeight: number } => {
+  if (state === 'unfilled') {
+    return { fill: 'var(--lqv-fg)', fillOpacity: 0.6, fontWeight: 400 };
+  }
+  if (state === 'filled') {
+    return { fill: filledColor, fillOpacity: 0.85, fontWeight: 400 };
+  }
+  return { fill: filledColor, fillOpacity: 1, fontWeight: 600 };
+};
 
 export const Funnel = ({
   votes,
@@ -253,46 +303,71 @@ export const Funnel = ({
 
       {/* Measuring stick — unsigned 0 to 10 magnitude. Direction is
           conveyed by water colour and the under-funnel readout's sign,
-          not by the ruler. */}
+          not by the ruler.
+          Round 15: ticks become an active vote indicator. Each tick
+          fills in the sign-colour at its integer milestone; the most
+          recently crossed tick is highlighted as `current`. The state
+          is purely a function of `Math.floor(|votes|)` — see
+          `src/lib/rulerState.ts`. Tick 0 is always passive; it's the
+          baseline reference, not a milestone the user reaches. */}
       <g aria-hidden="true" style={{ pointerEvents: 'none' }}>
-        {MINOR_VALUES.map((v) => (
-          <line
-            key={`minor-${v}`}
-            x1={rulerAxisX - MINOR_TICK_W}
-            x2={rulerAxisX}
-            y1={tickY(v)}
-            y2={tickY(v)}
-            stroke="var(--lqv-fg)"
-            strokeWidth={1}
-            strokeOpacity={0.32}
-          />
-        ))}
-        {MAJOR_VALUES.map((v) => (
-          <g key={`major-${v}`}>
+        {MINOR_VALUES.map((v) => {
+          const ts = tickState(v, votes);
+          const ts0 = tickStrokeStyle(ts, voteColor(votes), false);
+          return (
             <line
-              x1={rulerAxisX - MAJOR_TICK_W}
+              key={`minor-${v}`}
+              x1={rulerAxisX - MINOR_TICK_W}
               x2={rulerAxisX}
               y1={tickY(v)}
               y2={tickY(v)}
-              stroke="var(--lqv-fg)"
-              strokeWidth={1.5}
-              strokeOpacity={0.55}
+              style={{
+                ...ts0,
+                transition: reduceMotion
+                  ? 'none'
+                  : 'stroke 160ms ease, stroke-opacity 160ms ease, stroke-width 160ms ease',
+              }}
             />
-            <text
-              x={labelX}
-              y={tickY(v)}
-              fontSize={LABEL_FONT_SIZE}
-              fontFamily="'Suisse Intl', system-ui, sans-serif"
-              fill="var(--lqv-fg)"
-              fillOpacity={0.6}
-              dominantBaseline="middle"
-              textAnchor="start"
-              style={{ fontVariantNumeric: 'tabular-nums' }}
-            >
-              {v}
-            </text>
-          </g>
-        ))}
+          );
+        })}
+        {MAJOR_VALUES.map((v) => {
+          const ts = tickState(v, votes);
+          const tsLine = tickStrokeStyle(ts, voteColor(votes), true);
+          const tsLabel = tickLabelStyle(ts, voteColor(votes));
+          return (
+            <g key={`major-${v}`}>
+              <line
+                x1={rulerAxisX - MAJOR_TICK_W}
+                x2={rulerAxisX}
+                y1={tickY(v)}
+                y2={tickY(v)}
+                style={{
+                  ...tsLine,
+                  transition: reduceMotion
+                    ? 'none'
+                    : 'stroke 160ms ease, stroke-opacity 160ms ease, stroke-width 160ms ease',
+                }}
+              />
+              <text
+                x={labelX}
+                y={tickY(v)}
+                fontSize={LABEL_FONT_SIZE}
+                fontFamily="'Suisse Intl', system-ui, sans-serif"
+                dominantBaseline="middle"
+                textAnchor="start"
+                style={{
+                  ...tsLabel,
+                  fontVariantNumeric: 'tabular-nums',
+                  transition: reduceMotion
+                    ? 'none'
+                    : 'fill 160ms ease, fill-opacity 160ms ease',
+                }}
+              >
+                {v}
+              </text>
+            </g>
+          );
+        })}
       </g>
     </svg>
   );
