@@ -371,32 +371,41 @@ export const LiquidQV = ({
           return (
             <div
               key={item.id}
-              className="flex flex-col rounded-[14px] border p-3 md:p-4"
+              className="relative flex flex-col rounded-[14px] border p-3 md:p-4"
               style={{
                 borderColor: 'var(--lqv-funnel-wall)',
                 background: 'var(--lqv-card)',
               }}
             >
-              <div className="mb-2 flex items-baseline justify-between gap-2">
-                <h3 className="font-display text-size-1 leading-none truncate min-w-0">
-                  {item.title}
-                  {item.tag ? (
-                    <span className="ml-2 align-middle text-size--2 font-body text-[var(--lqv-muted)]">
-                      ({item.tag})
-                    </span>
-                  ) : null}
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => resetItem(item.id)}
-                  disabled={!canReset}
-                  className="text-size--3 underline text-[var(--lqv-water)] hover:text-[var(--lqv-water-dark)] disabled:opacity-40 disabled:no-underline"
-                  aria-label={`Reset votes on ${item.title}`}
-                >
-                  reset
-                </button>
-              </div>
+              {/* 1. Identity — candidate name + party.
+                  pr-12 reserves space for the absolutely-positioned
+                  reset link in the top-right corner. */}
+              <h3 className="font-display text-size-1 leading-none truncate min-w-0 pr-12">
+                {item.title}
+                {item.tag ? (
+                  <span className="ml-2 align-middle text-size--2 font-body text-[var(--lqv-muted)]">
+                    ({item.tag})
+                  </span>
+                ) : null}
+              </h3>
 
+              {/* 2. Status readout — sits as a header for the funnel
+                  below. Same type weight as before; it now anchors
+                  the card's text column rather than competing with
+                  the controls beside it. */}
+              <p
+                className="mt-1.5 font-display text-size-1 leading-none tabular-nums"
+                style={{ color: 'var(--lqv-fg)' }}
+                aria-live="off"
+              >
+                {fmtVotes(displayedVotes)} {voteWord}
+                <span className="ml-2 text-size--2 font-body text-[var(--lqv-muted)] tabular-nums">
+                  {fmtCredits(displayedCredits)} {creditWord}
+                </span>
+              </p>
+
+              {/* 3. Visual — pour stream sits in the gap above the funnel,
+                  reserving its 64-px slot whether or not it's flowing. */}
               <PourStream
                 visible={stream.visible && Math.abs(v) > 1e-9}
                 direction={stream.direction}
@@ -415,35 +424,36 @@ export const LiquidQV = ({
                 onPourEnd={handlers.end}
               />
 
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <p
-                  className="font-display text-size-1 leading-none tabular-nums"
-                  style={{ color: 'var(--lqv-fg)' }}
-                  aria-live="off"
-                >
-                  {fmtVotes(displayedVotes)} {voteWord}
-                  <span className="ml-2 text-size--2 font-body text-[var(--lqv-muted)] tabular-nums">
-                    {fmtCredits(displayedCredits)} {creditWord}
-                  </span>
-                </p>
-
-                <div className="flex items-center gap-1.5">
-                  <PourControl
-                    direction="out"
-                    disabled={!canDrain}
-                    ariaLabel={`Move ${item.title}'s vote down. Hold to continue; release to stop. Crosses zero into negative votes.`}
-                    onPourStart={handlers.startPourOut}
-                    onPourEnd={handlers.end}
-                  />
-                  <PourControl
-                    direction="in"
-                    disabled={!canPour}
-                    ariaLabel={`Move ${item.title}'s vote up. Hold to continue; release to stop. Crosses zero into positive votes.`}
-                    onPourStart={handlers.startPourIn}
-                    onPourEnd={handlers.end}
-                  />
-                </div>
+              {/* 4. Action — pour controls centered below the funnel. */}
+              <div className="mt-3 flex items-center justify-center gap-3">
+                <PourControl
+                  direction="out"
+                  disabled={!canDrain}
+                  ariaLabel={`Move ${item.title}'s vote down. Hold to continue; release to stop. Crosses zero into negative votes.`}
+                  onPourStart={handlers.startPourOut}
+                  onPourEnd={handlers.end}
+                />
+                <PourControl
+                  direction="in"
+                  disabled={!canPour}
+                  ariaLabel={`Move ${item.title}'s vote up. Hold to continue; release to stop. Crosses zero into positive votes.`}
+                  onPourStart={handlers.startPourIn}
+                  onPourEnd={handlers.end}
+                />
               </div>
+
+              {/* Reset link — visually pinned to the top-right, sourced
+                  last so the tab order is name → funnel → − → + → reset
+                  rather than reset coming first. */}
+              <button
+                type="button"
+                onClick={() => resetItem(item.id)}
+                disabled={!canReset}
+                className="absolute top-3 right-3 md:top-4 md:right-4 text-size--3 underline text-[var(--lqv-water)] hover:text-[var(--lqv-water-dark)] disabled:opacity-40 disabled:no-underline"
+                aria-label={`Reset votes on ${item.title}`}
+              >
+                reset
+              </button>
             </div>
           );
         })}
